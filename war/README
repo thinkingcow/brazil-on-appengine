@@ -1,0 +1,16 @@
+Copyright 2011 Google Inc. All Rights Reserved.
+
+The initial server configuration files (resources) go here.
+They are accumulated as follows:
+
+1) The WS delimited files named in the init parameter "config" in
+   WEB-INF/web.xml
+
+2) The file whose name matches the ApplicationID (or "local" for the
+   development server)  This allows the same "war" file to be deployed
+   to different appID's, each with its own behavior. (This is especially
+   useful when deploying via eclipse - one project may be used for
+   multiple deployments).
+
+3) The file in 2), appended with "-n" where 'n' is the app version number.
+

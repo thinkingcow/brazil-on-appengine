@@ -1,0 +1,245 @@
+# Copyright 2011 Google Inc. All Rights Reserved.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Sample server configuration.  This is the configuration used to support
+# an internal project, code named "Androgen".
+# Features (in arbitrary order)
+# - run an entire suite of websites with dynamically uploaded content
+# - allow new virtual hosts and their server configurations to be created,
+#   modified and deployed on the fly.
+# - Allow content to be uploaded either via command line scripts or web
+#   pages.
+# - Provide each user with their own "private" virtual filesystem
+
+log=5
+handler=main
+root=.
+exitOnError=true
+
+main.class=sunlabs.brazil.server.ChainHandler
+main.handlers=acl samples android cookie auth \
+  formUploadAdmin formUpload uploadAdmin \
+  mapToUser uploadUser append index mapToShared convert template \
+  file missing1 template file missing2 template
+
+
+# Define a set of virtual hosts, each with their own server configuration.
+# virtual hosts that are not defined use this file as the configuration.
+whichost.class=sunlabs.brazil.appengine.MultiHostHandler
+whichost.init=/admin/serverconfig.props
+
+# This is both a Handler (to do ACL checking) and a Template (to refresh
+# the credentials table) The "instance" property insures that template
+# can find its corrosponding handler instance.  ACL's can either be lists 
+# of glob patterns defined at deploy time (e.g. for bootstrapping the initial
+# admin credentials), or a list of allow/deny entries that may be changed
+# dynamically
+acl.class=sunlabs.brazil.appengine.RestrictEmailHandler
+acl.id=email
+acl.patterns=*@google.com *@gmail.com
+acl.resource=/admin/acl.props
+acl.instance=primary
+
+# Define some functions for common String manipulations (e.g.
+# ${Sql(foo)} returns the sql-escaped value of foo).
+convert.class=sunlabs.brazil.properties.SubstPropsHandler
+convert.tokens=Sql Html Url Trim Length
+convert.suffix=l
+Sql.class=sunlabs.brazil.properties.SubstPropsHandler$Sql
+Html.class=sunlabs.brazil.properties.SubstPropsHandler$Html
+Url.class=sunlabs.brazil.properties.SubstPropsHandler$Url
+Trim.class=sunlabs.brazil.properties.SubstPropsHandler$Trim
+Length.class=sunlabs.brazil.properties.SubstPropsHandler$Length
+
+# Deliver any text file in a directory ending in "-samples" as raw text,
+# skipping all template processing.
+samples.class=sunlabs.brazil.appengine.DownloadResourceHandler
+samples.match=-samples/
+samples.mime.aml=text/plain
+
+# persist all properties objects in JDO store
+persist.class=sunlabs.brazil.appengine.ResourceSessionManager
+
+# Use the "nickname" as the SessionID.  If not available, use the id
+# supplied by the app.  Appengine ensures we will always have a "nickname".
+android.class=sunlabs.brazil.handler.SimpleSessionHandler
+android.extract=${nickname#${x-uid}}
+
+# If no nickname or Androgen uid, use a regular browser cookie.
+# This isn't needed, as we should always have the appengine enforced id.
+cookie.class=sunlabs.brazil.handler.CookieSessionHandler
+cookie.cookie=upload
+
+# We use the endpoint "/upload" for manipulating the virtual filesystem
+# via scipts, and "/admin" for manipulating it via a web page.  Make sure
+# these endpoints are protected with the admin password.
+auth.class=sunlabs.brazil.handler.DigestAuthHandler
+auth.match=^(/upload|/admin)
+auth.realm=admin file uploading (not your LDAP password)
+auth.credentials=passwords
+
+# Upload user files via multipart-form submissions, but only into the
+# users "private" virtual filesystem
+formUpload.class=sunlabs.brazil.appengine.MultipartUploadResourceHandler
+formUpload.pattern=/androgen/${nickname#unknown}/${filename#unknown}
+formUpload.query=query.
+
+# Upload admin files via multipart-form submissions
+# be careful with this - it could overwrite anything on the server.
+# make sure it is in the "password protected" version of the system
+# Make sure that "uploadpath" is part of the form
+# This needs to be in front of "formUpload"
+formUploadAdmin.class=sunlabs.brazil.appengine.MultipartUploadResourceHandler
+formuploadAdmin.prefix=/admin
+formUploadAdmin.pattern=${uploadpath#bogus}/${filename#unknown}
+formUploadAdmin.query=query.
+
+# upload arbitrary resources via a protected prefix
+# The prefix is removed, allowing us to update any usr on the site using PUT
+uploadAdmin.class=sunlabs.brazil.appengine.UploadResourceHandler
+uploadAdmin.put=true
+uploadAdmin.get=true
+uploadAdmin.allowNamespace=true
+uploadAdmin.prefix=/upload
+
+# upload data files to users directories - no authentication req'd
+# Allow user's to upload anything in their own directory using PUT
+uploadUser.class=sunlabs.brazil.appengine.UploadResourceHandler
+uploadUser.put=true
+uploadUser.prefix=
+uploadUser.glob=/androgen/*
+
+# Allow Androgen to append to "data" files in the user's directory
+# and to a global "shared_data" directory. "shared_data" is for quick
+# prototypes (e.g. its probably a bad idea)
+append.class=sunlabs.brazil.appengine.UploadResourceHandler
+append.prefix=
+append.match=^/androgen/.*[.]data[.]|^/shared_data/
+
+# This gives each user their own "private" directory
+mapToUser.class=sunlabs.brazil.handler.UrlMapperHandler
+#mapToUser.match=^/androgen/(.*)
+# no colons in app names!
+mapToUser.match=^/androgen/([^:]*)$
+mapToUser.replace=/androgen/${nickname#unknown}/\\1
+
+# Any file in the user's private directory that begins with a capital
+# letter [A-Z] may be accessed by anyone read-only as
+# "user:App" to map to the app name.
+mapToShared.class=sunlabs.brazil.handler.UrlMapperHandler
+mapToShared.match=^/androgen/([^:/]+):([A-Z].*)
+mapToShared.replace=/androgen/\\1/\\2
+
+# Replace any URL that ends with / into the "index.bsl" file in that directory
+# this enables directory specific templates to handle the "index" file.
+index.class=sunlabs.brazil.handler.UrlMapperHandler
+index.match=/$
+index.replace=\\0index.bsl
+
+# Redirect all missing files into the global directory, so a "common"
+# copy can be delivered if it would otherwise not be found
+missing1.class=sunlabs.brazil.handler.UrlMapperHandler
+missing1.match=.*/(.+)
+missing1.replace=/shared/\\1
+
+# Redirect all missing files to the standard "missing file" template
+missing2.class=sunlabs.brazil.handler.UrlMapperHandler
+missing2.match=.*
+missing2.replace=/missing.bsl
+
+# Allow direct downloads of files before ACL checks
+# This allows any authenticated (but not yet authorized) user to fetch
+# the file.
+public.class=sunlabs.brazil.appengine.DownloadResourceHandler
+public.prefix=/downloads/
+
+# Run all of our markup through a series of templates
+template.class=sunlabs.brazil.appengine.CachedTemplateHandler
+template.templates=fixparser set bsl misc debug date form \
+  upload add macro delay email fetch csv json photo acl
+template.match=[.](bsl|aml)$
+template.headerTemplate=/header.init
+
+# variable set/get
+set.class=sunlabs.brazil.template.SetTemplate
+set.query=query.
+set.headers=headers.
+set.saveOk=true
+set.track=true
+
+# Change the parsing rules to allow '>' inside of quoted strings.
+fixparser.class=com.google.corp.productivity.specialprojects.brazil.AndrogenParsingRulesTemplate
+# brazil scripting language
+bsl.class=sunlabs.brazil.template.BSLTemplate
+# misc string functions
+misc.class=sunlabs.brazil.sunlabs.MiscTemplate
+# support for adding http headers
+add.class=sunlabs.brazil.template.AddHeaderTemplate
+# macros and attribute value substititutions
+macro.class=sunlabs.brazil.appengine.AndrogenMacroTemplate
+# pre-fill out forms
+form.class=sunlabs.brazil.template.FormTemplate
+# printf like debugging
+debug.class=sunlabs.brazil.template.DebugTemplate
+# date & time manipulation
+date.class=sunlabs.brazil.sunlabs.DateTemplate
+# fetch A URL from a remote server, and incorporate it into the page
+fetch.class=sunlabs.brazil.sunlabs.FetchTemplate
+# Add/modify  http headers
+add.class=sunlabs.brazil.template.AddHeaderTemplate
+# Ignore ${...} processing in selected portions of the markup, 
+# so it can be processed down-stream
+skip.class=sunlabs.brazil.appengine.SkipTemplate
+# Delay a response (for testing)
+delay.class=sunlabs.brazil.sunlabs.DelayHandler
+# generate Google chart compressed data
+vis.class=sunlabs.brazil.appengine.ChartHelperTemplate
+# Send email
+email.class=sunlabs.brazil.appengine.SendMail
+# Convert CSV files into properties
+csv.class=sunlabs.brazil.appengine.CsvConverterTemplate
+# Convert between properties and JSON
+json.class=sunlabs.brazil.json.JSONTemplate
+# Interact with Picasa
+photo.class=com.google.corp.productivity.specialprojects.brazil.gdata.PicasaTemplate
+
+#  XXX this will transition from UploadResourceHandler -> ResourceTemplate
+upload.class=sunlabs.brazil.appengine.UploadResourceHandler
+# Restrict uploaded-via-web file paths to match the following pattern.
+# This allows anyone to upload shared csv files, or anything to their
+# private directory
+upload.restrict=^/(shared/.*csv$|androgen/${nickname}/.*)
+# Uploading from these URL's are not subject to upload restrictions.  Make
+# sure they are admin protected
+upload.allow=^/admin/
+# ".aml" files need to be application/x-androgen for the android app,
+# but text/plain for inline downloading to the IDE
+upload.mime.aml=text/plain
+
+# Deliver "files", previously uploaded to the JDO store
+file.class=sunlabs.brazil.appengine.DownloadResourceHandler
+mime.apk=application/vnd.android.package-archive
+mime.css=text/css
+mime.data=text/x-java-properties
+mime.ico=image/vnd.microsoft.icon
+mime.jpg=image/jpeg
+mime.gif=image/gif
+mime.js=text/javascript
+mime.png=image/png
+mime.bsl=text/html
+mime.aml=application/x-androgen
+mime.raw=text/html
+mime.csv=text/plain
+mime.kml=application/vnd.google-earth.kml+xml
+mime.svg=image/svg+xml

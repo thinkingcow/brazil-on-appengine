@@ -1,0 +1,4 @@
+# Override the default configuration if running the dev server
+acl.patterns=*@example.com
+auth.credentials=local.passwords
+

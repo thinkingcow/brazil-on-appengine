@@ -1,0 +1,5 @@
+Any Virtual directory whose names ends in "-samples" deliveres its templates
+"as is" with no processing.  This allows users/admins to peruse
+non-interpolated templates as ascii text.
+
+See the "samples" rule in the supplied config file

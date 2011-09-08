@@ -1,0 +1,151 @@
+#!/bin/sh
+# Manage virtual files for Brazil appengine instances.
+# Usage:  manage [-option ...] Command file1 file2 ... dirn/filen
+# Command:  upload, download, delete
+#
+# Most of this deals with appengine authentication
+
+# App engine generic settings
+TOKENURL=https://www.google.com/accounts/ClientLogin
+SERVICE=ah
+TYPE=HOSTED_OR_GOOGLE
+COPTS=${CURL_OPTS:--s}
+
+# My specific app engine instance settings
+APPID=${APPID:-myandrogen}
+URL=http://$APPID.appspot.com
+LOGINURL=$URL/_ah/login
+# Something that will return "200" if authentication is OK
+VERIFYURL=$URL/index-orig.html
+# Upload point for this server
+UPLOADURL=$URL/upload
+# Digest credentials (we could prompt for these)
+COOKIEJAR=$HOME/.myCookie.txt
+PRGNAME=`basename $0`
+
+function usage() {
+ cat << EOF
+
+Usage: $PROGNAME [options] command files...
+  command:  upload|download|delete
+  options:
+    -a appid ([$APPID])
+    -f       (force overwrite existing file for delete)
+    -h host  (host name. [$URL])
+    -u user  (admin username [$ADMIN])
+    -p pass  (admin password XXXX)
+EOF
+}
+
+# Prompt the user for credentials
+function getcredentials() {
+ read -p "Email: " USER
+ stty -echo 
+ read -p "Password: " PASS; echo 
+ stty echo
+}
+
+# Get the clientlogin auth token
+function getauthtoken() {
+  getcredentials
+  AUTH=`curl $COPTS \
+    -d Email="$USER" -d Passwd="$PASS" \
+    -d accountType=$TYPE -d service=$SERVICE -d source=$APPID \
+    "$TOKENURL" |  sed -n 's/Auth=//p'`
+  PASS=XXX
+}
+
+# Trade the auth token for a cookie deposited in our cookie jar
+function getcookie() {
+  curl $COPTS -c $COOKIEJAR $LOGINURL?auth=$AUTH > /dev/null
+}
+
+# Try to fetch a small file to see if our cookie is OK
+function verifycookie() {
+  curl $COPTS -c $COOKIEJAR -i -b $COOKIEJAR $VERIFYURL | \
+  grep '^HTTP/1.1 200' > /dev/null && return 0
+  return 1
+}
+
+function upload() {
+  if [ ! -f $1 ]; then
+    echo "$1 does not exist, skipping"
+    continue
+  fi
+  curl $COPTS --digest --data-binary @$1 -u "$CREDENTIALS" \
+    -X PUT --header "Cookie: upload=batch" -b $COOKIEJAR \
+    -H "Content-Type: application/octet-stream" \
+    $UPLOADURL/$1
+}
+
+function delete() {
+  curl $COPTS --digest -u "$CREDENTIALS" \
+    -X DELETE --header "Cookie: upload=batch" -b $COOKIEJAR \
+    $UPLOADURL/$1
+}
+
+function download() {
+  if [ -e $1 -a X == X$FORCE ]; then
+    echo "$1 exists, skipping (see -f)"
+    continue
+  fi
+  mkdir -p `dirname "$1"`
+  curl $COPTS --digest -u "$CREDENTIALS" \
+    "Cookie: upload=batch" -b $COOKIEJAR \
+    $UPLOADURL/$1 > "$1"
+}
+
+while getopts ":a:h:v:u:p:f" opt; do
+  case $opt in
+  a) APPID=$OPTARG  ;;
+  f) FORCE=true;;
+  h) URL=$OPTARG ;;
+  v) VERIFYURK=$OPTARG ;;
+  u) ADMIN=$OPTARG ;;
+  p) PASS="$OPTARG" ;;
+ \?) echo "Invalid option: -$OPTARG, ignored" >&2 ;;
+  :) echo "Option -$OPTARG requires an argument." >&2 exit 1 ;;
+  esac
+done
+shift $((OPTIND-1))
+
+if [ $# -lt 2 ]; then
+  usage
+  exit 0
+fi
+
+CREDENTIALS="${ADMIN:-admin}:${PASS:-No Telling}"
+COMMAND=$1
+shift
+
+case $COMMAND in
+  upload) ;;
+  download) ;;
+  delete) ;;
+  *) echo "Invalid command: $COMMAND"; exit 2;;
+esac
+
+# Make sure we have a valid cookie then attempt to upload files
+# Give user 2 chances to enter the credentials
+
+for i in 1 2 3; do
+  verifycookie
+  result=$?
+  if [ "$result" == "0" ]; then
+    echo "Credentials OK"
+    break;
+  fi
+  if [ "$i" == "3" ]; then
+    echo "Authentication failure"
+    exit 1
+  fi
+  getauthtoken
+  getcookie
+done
+
+echo "$APPID $COMMAND... "
+for i in $*
+do
+  $COMMAND $i
+  echo ""
+done

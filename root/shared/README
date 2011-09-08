@@ -1,0 +1,5 @@
+Requests for missing resources are redirected here (see the missing1
+rule in the sample config file).
+
+This allows an administrator to provide "default" resources for particular
+URL's.

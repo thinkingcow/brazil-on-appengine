@@ -1,0 +1,17 @@
+Copyright 2011 Google Inc. All Rights Reserved.
+
+This directory should contain the following jar files to allow the
+sample configuration to run:
+  gdata-base-1.0.jar
+  gdata-core-1.0.jar
+  gdata-media-1.0.jar
+  gdata-photos-2.0.jar
+  gdata-photos-meta-2.0.jar
+  google-collect-1.0-rc1.jar
+  json.jar
+  mailapi.jar
+
+Additional external dependencies may be required for other
+parts of the system that are not used for the enclosed example. See
+  http://kenai.com/projects/nawsakabrazil/sources/subversion/show/naws/externalLibraries?rev=62
+for a list.

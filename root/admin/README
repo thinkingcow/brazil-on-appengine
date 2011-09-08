@@ -1,0 +1,17 @@
+Templates and resources that require admin access:
+
+acl.bsl
+  Manage ACL's for authorized users
+advanced.bsl
+  Virtual filesystem maintanence: list, upload, delete, copy
+androgen-ide.bsl
+  Simple web-editor for the Androgen project.  It demonstrates various
+  ways of using templates to interact with the virtual filesystem
+index.bsl
+  Admin landing page
+ls.bsl
+  List files
+props.bsl
+  list variables
+refresh.bsl
+  Refresh acl lists

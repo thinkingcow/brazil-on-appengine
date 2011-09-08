@@ -1,0 +1,7 @@
+This is the root directory for each user's private virtual filesystem.
+The following rules in the default config file define the behavior of
+urls in the "directory":
+- formUpload	upload files via form/multipart web forms
+- uploadUser	upload files via scripts (e.g. curl)
+- append	append lines to CSV files
+- mapToUser	Fetch resources

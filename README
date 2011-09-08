@@ -1,0 +1,55 @@
+The ported-to-appengine version of Brazil includes a sample configuration
+and "Virtual" document directory as an example.  This example was derived
+from an internal project, code named "Androgen", which allows a specialized
+Android app (not included) to interact with the server in interesting ways.
+
+Although the example might not be useful as-is, it demonstrates many of the
+capabilities of the system with minimal effort on my part.
+
+
+How to obtain external dependencies (jar files) to run the example app
+
+1) fetch and unpack the Google Appengine API's:
+  http://googleappengine.googlecode.com/files/appengine-java-sdk-1.5.3.zip
+
+2) Edit build.xml and change the location to the root of where you unpacked it:
+  <property name="sdk.dir" location=".../appengine-java-sdk-1.5.3" />
+
+3) Obtain the other library dependencies
+3a) Fetch The gdata client apis
+   http://gdata-java-client.googlecode.com/files/gdata-src.java-1.45.0.zip
+3b) unpack the zip file and 
+    - from the java/lib directory, copy the following jar files into "lib":
+      gdata-base-1.0.jar
+      gdata-core-1.0.jar
+      gdata-media-1.0.jar
+      gdata-photos-2.0.jar
+      gdata-photos-meta-2.0.jar
+    - from the java/deps directory, copy the following jar files into "lib":
+      google-collect-1.0-rc1.jar
+3c) Fetch "mailapi.jar" from Oracle (you might need to approve the license)
+    http://download.oracle.com/otn-pub/java/javamail/1.4.4//javamail1_4_4.zip
+3d) Unpack the zip file, and from the lib directory, copy int lib:
+      mailapi.jar
+3e) Fetch the Json.org json library.  You can fetch a copy from
+     http://kenai.com/projects/nawsakabrazil/sources/subversion/content/naws/externalLibraries/json.jar?rev=62
+    or build one yourself by fetching the source code from json.org and
+    building the jar file from the sources.  Put json.jar in "lib"
+
+4) Build the sources
+     ant compile
+
+5) Run your server (presumably you have modified your config files 
+   appropriately):
+     ant runserver
+   to start the development server on localhost
+
+6) Upload the "virtual" filesystem to the (development) server
+    cd root; upload-local `find * -type f`
+
+Notes:
+- All files that were derived from the Original Brazil distribution are
+  distributed under the terms of the Sun Public License. See the file
+  "license.terms".
+- All original files are distributed under the Apache-II license. See
+  the file "COPYING".

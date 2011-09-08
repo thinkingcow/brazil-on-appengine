@@ -1,0 +1,9 @@
+Scripts for dealing with administering the server:
+
+* fileloader
+  Upload/download/delete files on the virtual filesystem for deployed instances
+
+* upload-local
+  upload files to the development server.  Sample useage:
+    cd root; upload-local `find * -type f`
+  will upload the entire "filesystem" to the server

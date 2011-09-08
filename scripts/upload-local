@@ -1,0 +1,23 @@
+#!/bin/sh
+# upload the named files to the development server
+
+HOST=localhost:8080
+EMAIL=test@example.com
+
+COOKIE="`curl http://$HOST/_ah/login \
+  -d "email=$EMAIL" -d "action=Log+In" -d "continue=null" \
+  -s -c - | sed -n 's/.*\t//p'`"
+
+if [ X == X$COOKIE ]; then
+  echo "Can't authenticate to server"
+  exit 1
+fi
+for i in $*
+do
+  curl -s --digest --data-binary "@$i" -u admin:testing \
+    -X PUT -b "dev_appserver_login=$COOKIE" \
+    -H "Content-Type: application/octet-stream" \
+    http://$HOST/upload/$i 
+  echo ""
+done
+

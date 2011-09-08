@@ -1,0 +1,12 @@
+This is the root of the virtual filesystem for the server.
+Once the server is started, upload this directory to the server
+to create the "web site".
+
+To change a file, change it here, and re-upload it.
+Since the server configuration may be uploaded and changed on the fly,
+the entire personality of the server can be changed dynamically: the need
+to redeploy the server is only required if you need to modify the code.
+
+This "filesystem" is a skeleton version of the one used internally for
+"demo" purposes that works in conjunction with the supplied sample config
+file.  It will likely need to be modified to suit your needs.
