@@ -115,8 +115,8 @@
 
 /* MODIFICATIONS
  * 
- * Modifications to this file are derived, directly or indirectly, from Original Code provided by the
- * Initial Developer and are Copyright 2010-2011 Google Inc.
+ * Modifications to this file are derived, directly or indirectly, from Original Code provided by
+ * the Initial Developer and are Copyright 2010-2012 Google Inc.
  * See Changes.txt for a complete list of changes from the original source code.
  */
 
@@ -176,11 +176,11 @@ import java.util.StringTokenizer;
  * {@link #tag_sql see below}.
  *
  * @author		Stephen Uhler
- * @version		2.13
+ * @version     2.13
  */
 public class SqlTemplate extends Template {
 
-  Hashtable<String, ConInfo> connections = new Hashtable<String, ConInfo>();	// our database connections
+  Hashtable<String, ConInfo> connections = new Hashtable<String, ConInfo>(); // database connections
   boolean initialized = false;
 
   /**
@@ -191,7 +191,7 @@ public class SqlTemplate extends Template {
     super.init(hr);
     hr.addClosingTag("sql");
     if (initialized) {
-      return (true);
+      return true;
     }
     initialized = true;
     hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
@@ -296,9 +296,12 @@ public class SqlTemplate extends Template {
    * <dt>catalog    <dd>The name of the catalog (e.g. database) to set, if any
    * <dt>na		<dd>Value to reurn for NULL.  Defaults to "n/a"
    * <dt>type		<dd>The type of SQL command, one of "query", "system",
-   *			or "update".  these values map to the JDBC calls
+   *			"update" or "batch".  The first 3 values map to the JDBC calls
    *			executeQuery(), execute() and executeUpdate()
-   *			respectively. Defaults to "query".
+   *			respectively, defaulting to "query".
+   *            If "batch" is specified, then each query line that ends with a ";"
+   *            is run as a separate command.  In this case, none of the batched
+   *            commands should return a result set.
    * <dt>timeout	<dd>The number of seconds to wait for the query
    *			to finish.  Defaults to "0": wait forever
    * <dt>eval		<dd>If present, do ${...} to entire query. (see
@@ -337,6 +340,9 @@ public class SqlTemplate extends Template {
     String user = hr.get("user");
     String passwd = hr.get("passwd");
     String catalog = hr.get("catalog");
+    int max = Format.stringToInt(hr.get("max", null), 100);
+    int timeout = Format.stringToInt(hr.get("timeout", "0"), 0);
+
 
     String pre = hr.get("prefix");
     if (pre == null) {
@@ -347,8 +353,8 @@ public class SqlTemplate extends Template {
     boolean was = hr.accumulate(false);
     hr.nextToken();
     String query = hr.getBody();
-    hr.accumulate(was);
     hr.nextToken();	// eat the </sql>
+    hr.accumulate(was);
 
     if (!pre.equals("") && pre.endsWith(".") == false) {
       pre += ".";
@@ -371,9 +377,6 @@ public class SqlTemplate extends Template {
       props.put(pre + "error", msg);
       return;
     }
-    int max = Format.stringToInt(hr.get("max", null), 100);
-    int timeout = Format.stringToInt(hr.get("timeout", "0"), 0);
-
     if (eval) {
       query = Format.subst(props, query);
     }
@@ -415,15 +418,15 @@ public class SqlTemplate extends Template {
 
       StringBuffer columns = new StringBuffer();
       String delim = "";
-      for (int i = 0; i < count; i++) {
+      for (int i = 1; i <= count; i++) {
         String cn = na;
         try {
           cn = meta.getColumnName(i);
         } catch (SQLException e) {
           System.err.println("Can't get column name: " + e);
         }
-        props.put(pre + "columnName." + (i + 1), cn);
-        columns.append(delim).append(i + 1);
+        props.put(pre + "columnName." + i, cn);
+        columns.append(delim).append(i);
         delim = " ";
       }
       props.put(pre + "columns", columns.toString());
@@ -484,8 +487,13 @@ public class SqlTemplate extends Template {
       stmt.executeUpdate(query); // returns count
     } else if (type.equals("system")) {
       stmt.execute(query); // true -> resultset, false ->update count
+    } else if (type.equals("batch")) {
+      for (String item : query.split(";\n")) {
+        System.err.println("doSql batching: (" + query + ")");
+        stmt.addBatch(item);
+      }
+      stmt.executeBatch();
     }
-    System.err.println("doSql Done!");
     return stmt;
   }
 
@@ -505,6 +513,7 @@ public class SqlTemplate extends Template {
     try {
       column = meta.getColumnName(i);
     } catch (SQLException e) {
+      // ignore
     }
     if (!column.equals("")) {
       column += ".";
@@ -580,6 +589,7 @@ public class SqlTemplate extends Template {
         con.close();
         con = null;
       } catch (SQLException e) {
+        // ignore
       }
     }
 

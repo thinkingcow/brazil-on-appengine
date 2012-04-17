@@ -45,24 +45,24 @@ import java.util.Properties;
 
 public class CachedTemplateHandler implements Handler {
   private String namespace;
-  private String headerTemplate; // prepend all markup with this everytime
-  private String footerTemplate; // add this markup to the end of everything
-  private String sessionProperty;	// where to find the session name
-  private MatchString isMine;         // check for matching url
-  private boolean modified;		// if set, emit last-modified header
-  private TemplateRunner runner;		// The template object for our class
+  private String headerTemplate;  // prepend all markup with this everytime
+  private String footerTemplate;  // add this markup to the end of everything
+  private String sessionProperty; // where to find the session name
+  private MatchString isMine;     // check for matching url
+  private boolean modified;       // if set, emit last-modified header
+  private TemplateRunner runner;  // The template object for our class
 
   @Override
   public boolean
   init(Server server, String prefix) {
     Properties props = server.getProps();
-	isMine = new MatchString(prefix, props);
+    isMine = new MatchString(prefix, props);
     namespace = props.getProperty(prefix + "namespace", "brazil");
     headerTemplate = props.getProperty(prefix + "headerTemplate");
     footerTemplate = props.getProperty(prefix + "footerTemplate");
     sessionProperty = props.getProperty(prefix + "session", "SessionID");
     modified = Format.isTrue(props.getProperty(prefix + "modified"));
-    
+
     String str = props.getProperty(prefix + "templates");
     if (str == null) {
       server.log(Server.LOG_ERROR, prefix, "no \"templates\" property specified");
@@ -70,31 +70,31 @@ public class CachedTemplateHandler implements Handler {
     }
 
     try {
-        runner = new TemplateRunner(server, prefix, str);
+      runner = new TemplateRunner(server, prefix, str);
     } catch (ClassCastException e) {
-        server.log(Server.LOG_ERROR, e.getMessage(), "not a Template");
-        return false;
+      server.log(Server.LOG_ERROR, e.getMessage(), "not a Template");
+      return false;
     } catch (ClassNotFoundException e) {
-        server.log(Server.LOG_ERROR, e.getMessage(), "unknown class");
-        return false;
+      server.log(Server.LOG_ERROR, e.getMessage(), "unknown class");
+      return false;
     }
     return true;
   }
-  
+
   @Override
   public boolean
   respond(Request request) throws IOException {
     String url = request.getUrl();
     Properties props = request.getProps();
     String prefix = isMine.prefix();
-    
+
     if (url.endsWith("/")) {
       url += props.getProperty(prefix + "default" + "", "index.html");
     }
     if (!isMine.match(url)) {
       return false;
     }
-    
+
     int index = url.lastIndexOf('.');
     if (index < 0) {
       request.log(Server.LOG_INFORMATIONAL, prefix, "no suffix suffix for: " + url);
@@ -106,27 +106,27 @@ public class CachedTemplateHandler implements Handler {
       request.log(Server.LOG_INFORMATIONAL, prefix, "unknown type for: " + url);
       return false;
     }
-    
+
     // make sure this is a text file!
 
     if (!type.toLowerCase().startsWith("text/")) {
-        request.log(Server.LOG_INFORMATIONAL, prefix, "Not a text type: " + type);
-        return false;
+      request.log(Server.LOG_INFORMATIONAL, prefix, "Not a text type: " + type);
+      return false;
     }
 
     request.log(Server.LOG_DIAGNOSTIC, prefix, "finding root for (" + prefix +
-            ") [" + props.getProperty(prefix + FileHandler.ROOT, "n/a") + "][" +
-            props.getProperty(FileHandler.ROOT, "n/a") + "]");
-    request.getServerProps().save(System.err, "ServerProps");
-    request.getProps().save(System.err, "RequestProps");
+        ") [" + props.getProperty(prefix + FileHandler.ROOT, "n/a") + "][" +
+        props.getProperty(FileHandler.ROOT, "n/a") + "]");
+    // request.getServerProps().save(System.err, "ServerProps");
+    // request.getProps().save(System.err, "RequestProps");
     String root = props.getProperty(prefix + FileHandler.ROOT,
-            props.getProperty(FileHandler.ROOT, "")).trim();
+        props.getProperty(FileHandler.ROOT, "")).trim();
     if (root.equals(".") || root.equals("/")) { // XXX we have no concept of current directory
       root = "";
     }
     request.log(Server.LOG_DIAGNOSTIC, prefix, root + "+" + url);
     url = root + url;
-    
+
     Resource resource = Resource.load(namespace + url);
     if (resource == null) {
       request.log(Server.LOG_DIAGNOSTIC, prefix, "Not found: " + url);
@@ -138,7 +138,7 @@ public class CachedTemplateHandler implements Handler {
     String result = runner.process(request, template, session);
     request.log(Server.LOG_DIAGNOSTIC + 1, prefix, "{" + template + "}\n{" +  result + "}");
     if (result != null && !Format.isTrue(props.getProperty(prefix + "alwaysCancel"))) {
-      FileHandler.setModified(request.getProps(),resource.getLastMod());
+      FileHandler.setModified(request.getProps(), resource.getLastMod());
       if (modified) {
         request.addHeader("Last-Modified", HttpUtil.formatTime(resource.getLastMod()));
       }
@@ -149,7 +149,7 @@ public class CachedTemplateHandler implements Handler {
       return false;
     }
   }
-  
+
   /**
    * Return the contents of a "template" as a string
    * @return Template contents, or ""

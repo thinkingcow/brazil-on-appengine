@@ -49,8 +49,8 @@
 
 /* MODIFICATIONS
  * 
- * Modifications to this file are derived, directly or indirectly, from Original Code provided by the
- * Initial Developer and are Copyright 2010-2011 Google Inc.
+ * Modifications to this file are derived, directly or indirectly, from Original Code provided by
+ * the Initial Developer and are Copyright 2010-2012 Google Inc.
  * See Changes.txt for a complete list of changes from the original source code.
  */
 
@@ -68,6 +68,7 @@ import java.io.IOException;
 import java.util.Hashtable;
 import java.util.Properties;
 import java.util.StringTokenizer;
+import java.util.regex.Pattern;
 
 /**
  * Handler that performs value conversions on ${...} substitutions.
@@ -144,7 +145,7 @@ import java.util.StringTokenizer;
  * interface.  See below for their functions.
  *
  * @author	Stephen Uhler
- * @version		1.5
+ * @version 1.5
  *
  * @see java.util.Properties
  */
@@ -165,7 +166,7 @@ public class SubstPropsHandler implements Handler {
     matchRe = new Regexp(server.getProps().getProperty(prefix + "match",
     "(^[a-zA-Z]+)\\((.+)\\)$"));
     keySub = server.getProps().getProperty(prefix + "key", "\\2");
-    tokenSub=server.getProps().getProperty(prefix + "token", "\\1");
+    tokenSub = server.getProps().getProperty(prefix + "token", "\\1");
     StringTokenizer st = new StringTokenizer(
             server.getProps().getProperty(prefix + "tokens"));
 
@@ -174,7 +175,7 @@ public class SubstPropsHandler implements Handler {
     while(st.hasMoreTokens()) {
       String token = st.nextToken();
       String className = server.getProps().getProperty(token + ".class");
-      String match=server.getProps().getProperty(token + ".code", token);
+      String match = server.getProps().getProperty(token + ".code", token);
       String name = prefix;
       if (className == null) {
         className = token;	// use token as prefix;
@@ -182,13 +183,13 @@ public class SubstPropsHandler implements Handler {
         name = match;
       }
       try {
-        Class<Convert> type =  (Class<Convert>) Class.forName(className);
+        Class<? extends Convert> type =  Class.forName(className).asSubclass(Convert.class);
         Convert obj = type.newInstance();
         String pre;
         if (name.endsWith(".")) {
-          pre=name;
+          pre = name;
         } else {
-          pre= name + ".";
+          pre = name + ".";
         }
         Object[] args = new Object[] {pre, server.getProps()};
         Object result = type.getMethod("init", types).invoke(obj, args);
@@ -273,6 +274,7 @@ public class SubstPropsHandler implements Handler {
 
     /**
      * Given a value, compute the converted value.
+     * value may not be null.
      */
 
     String convert(String value, String token) {
@@ -311,16 +313,28 @@ public class SubstPropsHandler implements Handler {
    *  Sample mapping classes.  This replicated much of the functionality of
    *  &lt;stringop&gt; in the MiscTemplate, only in a functional format.
    */
+  
+  /**
+   * Null converter - can be subclassed to add behavior.
+   * Returns its argument.
+   */
+  public static class NullConverter implements Convert {
+    @Override
+    public boolean init(String prefix, Properties p) {
+      return true;
+    }
+
+    @Override
+    public String map(String value) {
+      return value;
+    }
+  }
 
   /**
    * Convert a value to lowercase.
    */
 
-  public static class LowerCase implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
+  public static class LowerCase extends NullConverter {
     @Override
     public String map(String value) {
       return value.toLowerCase();
@@ -331,11 +345,7 @@ public class SubstPropsHandler implements Handler {
    * Base64 encode a value.
    */
 
-  public static class Base64Encode implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
+  public static class Base64Encode extends NullConverter {
     @Override
     public String map(String value) {
       return Base64.encode(value);
@@ -346,11 +356,7 @@ public class SubstPropsHandler implements Handler {
    * Trim whitespace from a value.
    */
 
-  public static class Trim implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
+  public static class Trim extends NullConverter {
     @Override
     public String map(String value) {
       return value.trim();
@@ -361,11 +367,7 @@ public class SubstPropsHandler implements Handler {
    * HTML escape a value.
    */
 
-  public static class Html implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
+  public static class Html extends NullConverter {
     @Override
     public String map(String value) {
       return HttpUtil.htmlEncode(value);
@@ -376,11 +378,7 @@ public class SubstPropsHandler implements Handler {
    * Protect html tags (just &lt; and &gt;)
    */
 
-  public static class ProtectTags implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
+  public static class ProtectTags extends NullConverter {
     @Override
     public String map(String value) {
       StringBuffer sb = new StringBuffer();
@@ -403,11 +401,7 @@ public class SubstPropsHandler implements Handler {
    * URL encode a String.
    */
 
-  public static class Url implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
+  public static class Url extends NullConverter {
     @Override
     public String map(String value) {
       return HttpUtil.urlEncode(value);
@@ -415,26 +409,14 @@ public class SubstPropsHandler implements Handler {
   }
 
   /**
-   * Escape SQL strings (double all ' characters).:w
+   * Escape SQL strings (double all ' characters)
+   * This doesn't deal with surrounding (') but probably should.
    */
-  public static class Sql implements Convert {
+  public static class Sql extends NullConverter {
     @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
-    @Override
+    
     public String map(String value) {
-      StringBuffer sb = new StringBuffer();
-      StringTokenizer st = new StringTokenizer(value, "'", true);
-      while (st.hasMoreTokens()) {
-        String token = st.nextToken();
-        if (token.equals("'")) {
-          sb.append("'");
-        }
-        sb.append(token);
-      }
-      System.err.println("Sql mapping (" + value + ") to (" + sb.toString());
-      return sb.toString();
+      return value.indexOf("'") < 0 ? value : value.replaceAll("'", "''");
     }
   }
 
@@ -444,12 +426,7 @@ public class SubstPropsHandler implements Handler {
    * XXX broken - doesn't parse multiple args properly
    */
 
-  public static class Front implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
-
+  public static class Front extends NullConverter {
     @Override
     public String map(String args) {
       int sep = args.lastIndexOf(',');
@@ -475,18 +452,12 @@ public class SubstPropsHandler implements Handler {
    * Return the length of a string.
    */
 
-  public static class Length implements Convert {
-    @Override
-    public boolean init(String prefix, Properties p) {
-      return true;
-    }
-
+  public static class Length extends NullConverter {
     @Override
     public String map(String value) {
       return "" + value.length();
     }
   }
-
 
   /**
    * Do a regexp substitution on a value.
@@ -509,7 +480,7 @@ public class SubstPropsHandler implements Handler {
       String matchStr=p.getProperty(prefix + "match");
       sub = p.getProperty(prefix + "sub");
       match = new Regexp(matchStr);
-      if (match==null || sub == null) {
+      if (match == null || sub == null) {
         System.out.println("Missing 'match' and 'sub'");
         return false;
       }
@@ -519,6 +490,35 @@ public class SubstPropsHandler implements Handler {
     @Override
     public String map(String value) {
       return match.subAll(value, sub);
+    }
+  }
+  
+  /**
+   * Escape a CSV value.
+   * Any string containing [,"\n] is surrounded by (") and
+   * has any (") doubled.  Nulls are replaced by "".
+   * @author suhler@google.com (Stephen Uhler)
+   *
+   */
+  public static class Csv extends NullConverter {
+    @Override
+    public String map(String value) {
+      if (csvPattern.matcher(value).matches()) {
+        value = "\"" + value.replaceAll("\"", "\"\"") + "\"";
+      }
+      return value;
+    }
+  }
+  private static final Pattern csvPattern = Pattern.compile(".*[\"\n,].*");
+  
+  /**
+   * escape 's.
+   * @author suhler@google.com (Stephen Uhler)
+   */
+  public static class Js extends NullConverter {
+    @Override
+    public String map(String value) {
+       return value.replaceAll("'", "\\\\'");
     }
   }
 }

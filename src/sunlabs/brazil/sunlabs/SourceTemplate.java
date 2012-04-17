@@ -113,81 +113,81 @@ import java.io.UnsupportedEncodingException;
 
 public class SourceTemplate extends Template {
 
-    public void
-    tag_source(RewriteContext hr) {
-	String src = hr.get("src");	// the file to fetch
-	String enc = hr.get("encoding");	// character encoding
-	String name = hr.get("name");	// property to store content in
-	String dflt = hr.get("default"); // default file if "src" doesn't exist
-	boolean shouldEval=hr.isTrue("eval"); // run through subst()
-	boolean shouldReprocess = hr.isTrue("reprocess");
-        debug(hr);
-        hr.killToken();
+  public void
+  tag_source(RewriteContext hr) {
+    String src = hr.get("src");	// the file to fetch
+    String enc = hr.get("encoding");	// character encoding
+    String name = hr.get("name");	// property to store content in
+    String dflt = hr.get("default"); // default file if "src" doesn't exist
+    boolean shouldEval=hr.isTrue("eval"); // run through subst()
+    boolean shouldReprocess = hr.isTrue("reprocess");
+    debug(hr);
+    hr.killToken();
 
-	if (src == null) {
-	    debug(hr, "\"src\" not specified");
-	    return;
-	}
-
-	ByteArrayOutputStream baos = null;
-	String result = null;
-	try {
-	    baos = getContent(hr, src);
-	} catch (IOException e) {
-	    debug(hr, "Bad source file: " + e);
-            baos=null;
-	}
-        if (baos == null && dflt != null) {
-	    try {
-		baos = getContent(hr, dflt);
-	    } catch (IOException e) {
-		debug(hr, "Bad default file: " + e);
-                baos=null;
-	    }
-        }
-        if (baos == null) {
-            return;
-        }
-	if (enc != null) {
-	    try {
-		result= baos.toString(enc);
-	    } catch (UnsupportedEncodingException e) {
-		debug(hr, "Bad encoding format: " + enc);
-	    }
-	}
-	if (result == null) {
-	    result = baos.toString();
-	}
-	if (shouldEval) {
-	    result = Format.subst(new RewriteContext.AttributeProps(hr),
-		 result);
-	}
-	if (name != null) {
-	    hr.getNamespaceProperties().put(name, result);
-	} else if (shouldReprocess) {
-	    String rest = hr.lex.rest();
-	    if (rest != null) {
-	        hr.lex.replace(result + rest);
-	    } else {
-	        hr.lex.replace(result);
-	    }
-	} else {
-	    hr.append(result);
-	}
+    if (src == null) {
+      debug(hr, "\"src\" not specified");
+      return;
     }
 
-    /**
-     * Fetch a resource from its name
-     */
-    
-    ByteArrayOutputStream
-    getContent(RewriteContext hr, String src) throws IOException {
-	ByteArrayOutputStream baos = new ByteArrayOutputStream();
-	HttpInputStream hin = new HttpInputStream(
-		ResourceHandler.getResourceStream(
-		hr.request.getProps(), hr.prefix, src));
-	hin.copyTo(baos);
-        hin.close();
-        return baos;
+    ByteArrayOutputStream baos = null;
+    String result = null;
+    try {
+      baos = getContent(hr, src);
+    } catch (IOException e) {
+      debug(hr, "Bad source file: " + e);
+      baos=null;
     }
+    if (baos == null && dflt != null) {
+      try {
+        baos = getContent(hr, dflt);
+      } catch (IOException e) {
+        debug(hr, "Bad default file: " + e);
+        baos=null;
+      }
+    }
+    if (baos == null) {
+      return;
+    }
+    if (enc != null) {
+      try {
+        result= baos.toString(enc);
+      } catch (UnsupportedEncodingException e) {
+        debug(hr, "Bad encoding format: " + enc);
+      }
+    }
+    if (result == null) {
+      result = baos.toString();
+    }
+    if (shouldEval) {
+      result = Format.subst(new RewriteContext.AttributeProps(hr),
+          result);
+    }
+    if (name != null) {
+      hr.getNamespaceProperties().put(name, result);
+    } else if (shouldReprocess) {
+      String rest = hr.lex.rest();
+      if (rest != null) {
+        hr.lex.replace(result + rest);
+      } else {
+        hr.lex.replace(result);
+      }
+    } else {
+      hr.append(result);
+    }
+  }
+
+  /**
+   * Fetch a resource from its name
+   */
+
+  protected ByteArrayOutputStream
+  getContent(RewriteContext hr, String src) throws IOException {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    HttpInputStream hin = new HttpInputStream(
+        ResourceHandler.getResourceStream(
+            hr.request.getProps(), hr.prefix, src));
+    hin.copyTo(baos);
+    hin.close();
+    return baos;
+  }
 }

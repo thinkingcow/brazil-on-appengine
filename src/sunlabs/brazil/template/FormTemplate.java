@@ -208,16 +208,20 @@ public class FormTemplate extends Template {
      * no substitution is done.
      * If <code>value</code> contains any ${..} constructs, the substituted
      * value is used instead of the value in the corrosponding request property.
+     * <p>
+     * The attribute "nosub=true" on input elements subpresses value substitution.
      */
     public void tag_input(RewriteContext hr) {
         total++;
-
-	String origValue = hr.get("value");
+    hr.substAttributeValues();
+	String origValue = hr.get("value", false);
+	boolean noSub = hr.isTrue("nosub");
+	hr.remove("nosub");
 	if (origValue != null) {
 	    hr.put("value", origValue);
 	}
 
-        String name = hr.get("name");
+        String name = hr.get("name", false);
         if (name == null) {
             return;
         } else {
@@ -225,7 +229,7 @@ public class FormTemplate extends Template {
 	}
 
         String value = hr.request.getProps().getProperty(prepend + name);
-        if (value == null) {
+        if (value == null || noSub) {
             return;
         }
 
@@ -277,20 +281,21 @@ public class FormTemplate extends Template {
      * Do ${...} substitutions on the value.
      */
     public void tag_option(RewriteContext hr) {
-        String value = hr.get("value");
+      String value = hr.get("value");
 
-        if (value != null) {
-	    hr.put("value", value);
-        }
+      if (value != null) {
+        hr.put("value", value);
+      }
+      hr.substAttributeValues();
 
-        if (selectName == null || selectValue == null || value == null) {
-            return;
-        }
-        if (value.equals(selectValue)) {
-            hr.put("selected", "");
-        } else {
-            hr.remove("selected");
-        }
+      if (selectName == null || selectValue == null || value == null) {
+        return;
+      }
+      if (value.equals(selectValue)) {
+        hr.put("selected", "");
+      } else {
+        hr.remove("selected");
+      }
     }
 
     /**

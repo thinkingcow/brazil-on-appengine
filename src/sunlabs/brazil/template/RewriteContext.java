@@ -172,7 +172,7 @@ public class RewriteContext extends HtmlRewriter {
     public String prefix;
     /**
      * This is the prefix defined by the invoker of a set of templates.  Its
-     * value corrosponds to the class that invokes a set of templates.
+     * value corresponds to the class that invokes a set of templates.
      */
     public String templatePrefix;
     /**

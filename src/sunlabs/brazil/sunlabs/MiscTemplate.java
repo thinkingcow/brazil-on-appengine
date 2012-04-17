@@ -147,6 +147,7 @@ import sunlabs.brazil.util.regexp.Regexp;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.util.Dictionary;
 import java.util.Enumeration;
@@ -315,12 +316,14 @@ public class MiscTemplate extends Template {
 
     try {
       incr = Integer.decode(amount).intValue();
-    } catch (Exception e) {}
+    } catch (Exception e) {
+      // ignore
+    }
 
     // no value, set to increment
 
     if (current == null || current.trim().equals("")) {
-      return("" + incr);
+      return "" + incr;
     }
 
     // It's numeric, do the increment
@@ -328,7 +331,9 @@ public class MiscTemplate extends Template {
     try {
       val = Integer.decode(current).intValue();
       return "" + (val + incr);
-    } catch (Exception e) {}
+    } catch (Exception e) {
+      // ignore
+    }
 
     // look for a trailing number to increment
 
@@ -337,12 +342,14 @@ public class MiscTemplate extends Template {
 
     try {
       val = Integer.decode(subs[2]).intValue();
-    } catch (Exception e) {}
+    } catch (Exception e) {
+      // ignore
+    }
     val += incr;
     if (val != 0) {
-      return(subs[1] + val);
+      return subs[1] + val;
     } else {
-      return(subs[1]);
+      return subs[1];
     }
   }
 
@@ -390,7 +397,7 @@ public class MiscTemplate extends Template {
       count = min;
     }
 
-    if (max>=1 && max>=min && count>max) {
+    if (max >= 1 && max >= min && count > max) {
       count = max;
     }
 
@@ -399,11 +406,11 @@ public class MiscTemplate extends Template {
       return;
     }
     StringBuffer sb = new StringBuffer();
-    if (start==null) {
+    if (start == null) {
       start = "1";
     }
-    for(int i=0; i < count; i++) {
-      sb.append(i==0 ? "" : delim).append(start);
+    for (int i=0; i < count; i++) {
+      sb.append(i == 0 ? "" : delim).append(start);
       start = incr(start, incr);
     }
     if (name == null) {
@@ -433,7 +440,8 @@ public class MiscTemplate extends Template {
    * <dd>0<dd>a digit, if required, 0 otherwise.
    * </dl>
    * Example: <code>format="$#,##0.00"</code> would be typical for
-   * expressing monetary values.
+   * expressing monetary values.  In addition, "truncate=tru" can be use
+   * to force truncation instead of rounding.
    */
 
   public void tag_expr(RewriteContext hr) {
@@ -443,13 +451,16 @@ public class MiscTemplate extends Template {
     debug(hr);
     hr.killToken();
 
-    Properties props = hr.request.getProps();
     Calculator calc = new Calculator(hr.request.getProps());
     String result = "NaN";
     try {
       result = calc.getValue(value);
       if (format != null) {
-        result=new DecimalFormat(format).format(Double.valueOf(result).doubleValue());
+        DecimalFormat decimalFormat = new DecimalFormat(format);
+        if (hr.isTrue("truncate")) {
+          decimalFormat.setRoundingMode(RoundingMode.FLOOR);
+        }
+        result=decimalFormat.format(Double.valueOf(result).doubleValue());
       }
     } catch (ArithmeticException e) {
       debug(hr, "Invalid expression: " + e);
@@ -512,7 +523,7 @@ public class MiscTemplate extends Template {
     boolean backslashes = hr.isTrue("backslashes");
     boolean params = hr.isTrue("params");
     String result = null;
-    int max=10;	// arbitrary
+    int max = 10;	// arbitrary
 
     debug(hr);
     hr.killToken();
@@ -524,11 +535,11 @@ public class MiscTemplate extends Template {
       if (!recurse || result.equals(value)) {
         break;
       }
-      value=result;
+      value = result;
     }
 
     debug(hr, "mapping:" + value + "=>" + result);
-    if (name==null) {
+    if (name == null) {
       hr.append(result);
     } else {
       hr.getNamespaceProperties().put(name, result);
@@ -567,14 +578,14 @@ public class MiscTemplate extends Template {
       return;
     }
 
-    if (stack!= null && hr.isTrue("clear")) {
+    if (stack != null && hr.isTrue("clear")) {
       stack.clear(name);
     }
     String old = hr.request.getProps().getProperty(name);
     if (old != null) {
       stack.push(name, old);
     }
-    Properties props = hr.getNamespaceProperties();
+    // Properties props = hr.getNamespaceProperties();
     hr.request.getProps().put(name, value);
   }
 
@@ -635,7 +646,7 @@ public class MiscTemplate extends Template {
     hr.killToken();
 
     if (name == null) {
-      eval=true;
+      eval = true;
     }
     boolean was = hr.accumulate(false);
     hr.nextToken();
@@ -648,11 +659,11 @@ public class MiscTemplate extends Template {
       body = Format.subst(params ? new RewriteContext.AttributeProps(hr) :
         hr.request.getProps(), body, noesc);
     }
-    if (name==null) {
+    if (name == null) {
       hr.append(body);
     } else {
       Properties props = hr.getNamespaceProperties();
-      String result = append ? props.getProperty(name,"") + body : body;
+      String result = append ? props.getProperty(name, "") + body : body;
       props.put(name, result);
       debug(hr, body);
     }
@@ -711,10 +722,10 @@ public class MiscTemplate extends Template {
    */
 
   public void tag_stringop(RewriteContext hr) {
-    String name=hr.get("name");
+    String name = hr.get("name");
     debug(hr);
     hr.killToken();
-    if (name==null) {
+    if (name == null) {
       debug(hr, "name not specified");
       return;
     }
@@ -742,8 +753,8 @@ public class MiscTemplate extends Template {
    */
 
   public void tag_stringlength(RewriteContext hr) {
-    String name=hr.get("name");
-    String value=hr.get("value");
+    String name = hr.get("name");
+    String value = hr.get("value");
     debug(hr);
     hr.killToken();
     if (name==null || value == null) {
@@ -764,7 +775,7 @@ public class MiscTemplate extends Template {
     }
     if ("left".equals(how)) {
       int i;
-      for(i=0;i<value.length();i++) {
+      for(i = 0 ; i < value.length(); i++) {
         if (!Character.isWhitespace(value.charAt(i))) {
           break;
         }
@@ -772,7 +783,7 @@ public class MiscTemplate extends Template {
       return value.substring(i);
     } else if ("right".equals(how)) {
       int i;
-      for(i=value.length()-1;i >=0;i--) {
+      for(i = value.length()-1; i >= 0; i--) {
         if (!Character.isWhitespace(value.charAt(i))) {
           break;
         }
@@ -814,7 +825,9 @@ public class MiscTemplate extends Template {
    */
 
   String strip(String value, String chars) {
-    if (chars == null) return value;
+    if (chars == null) {
+      return value;
+    }
     return  new Regexp("[" + chars + "]").subAll(value, "");
   }
 
@@ -862,8 +875,8 @@ public class MiscTemplate extends Template {
     if (how == null) {
       return value;
     }
-    int from=0;
-    int to=0;
+    int from = 0;
+    int to = 0;
     int len = value.length();
     int indx = how.indexOf(",");
     if (indx > 0) {
@@ -987,7 +1000,7 @@ public class MiscTemplate extends Template {
       hr.get("range") != null ||
       hr.get("convert") != null ||
       hr.get("strip") != null  ||
-      hr.get("case")!= null;
+      hr.get("case") != null;
     boolean delSrc = hr.isTrue("remove");
     debug(hr);
     hr.killToken();
@@ -997,12 +1010,12 @@ public class MiscTemplate extends Template {
       return;
     }
 
-    Enumeration names = hr.request.getProps().propertyNames(src);
+    Enumeration<String> names = hr.request.getProps().propertyNames(src);
     Properties dstProps = hr.getNamespaceProperties();
     int count = 0;
     boolean didDst = false;
     while(names.hasMoreElements()) {
-      String name = (String) names.nextElement();
+      String name = names.nextElement();
       Properties props = new GlobProperties(hr.request.getProps(), src, name,
               ("" + ++count)); 
       String newName;
@@ -1039,8 +1052,8 @@ public class MiscTemplate extends Template {
 
     if (didDst) {
       Template t = hr.templateFromTag("import");
-      if (t!=null && t instanceof sunlabs.brazil.template.SetTemplate) {
-        ((sunlabs.brazil.template.SetTemplate)t).doImport(hr);
+      if (t != null && t instanceof sunlabs.brazil.template.SetTemplate) {
+        ((sunlabs.brazil.template.SetTemplate) t).doImport(hr);
       }
     }
 
@@ -1056,19 +1069,21 @@ public class MiscTemplate extends Template {
   static Random rand = new Random();
   public void tag_random(RewriteContext hr) {
     String name = hr.get("name");
-    String type = hr.get("type","int"); // "int", "hex" or "alpha"
+    String type = hr.get("type", "int"); // "int", "hex" or "alpha"
 
     int count = 2;
     try {
       count = Integer.decode(hr.get("count")).intValue();
-    } catch (Exception e) {}
-    int value = Math.abs(rand.nextInt()%count);
+    } catch (Exception e) {
+      // ignore
+    }
+    int value = Math.abs(rand.nextInt() % count);
     String result;
 
     if (type.equals("hex")) {
-      int start=0;
+      int start = 0;
       try {
-        start = Integer.parseInt(hr.get("start","0").toLowerCase(), 16);
+        start = Integer.parseInt(hr.get("start", "0").toLowerCase(), 16);
       } catch (Exception e) {}
       result = Integer.toString(start+value, 16);
     } else if (type.equals("alpha")) {
@@ -1159,7 +1174,7 @@ public class MiscTemplate extends Template {
   }
 
   /**
-   * Special version of a properties that uses the sub expresions
+   * Special version of a properties that uses the sub expresons
    * of the supplied glob pattern and name to define the keys 1-9.
    * The value "0" takes the supplied default.
    */
@@ -1185,7 +1200,7 @@ public class MiscTemplate extends Template {
       } else if (key.equals("mapCount")) {
         return dflt;
       } else if (key.length() == 1 &&
-              (index="123456789".indexOf(key)) >= 0) {
+              (index = "123456789".indexOf(key)) >= 0) {
         String result = subStr[index];
         return result == null ? "" : result;
       } else {
@@ -1304,12 +1319,12 @@ public class MiscTemplate extends Template {
       StringBuffer names = new StringBuffer();
       StringBuffer counts = new StringBuffer();
       Properties p = new Properties();
-      for(Enumeration<String> e = table.keys(); e.hasMoreElements();) {
+      for(Enumeration<String> e = table.keys(); e.hasMoreElements(); ) {
         String name =  e.nextElement();
         Stack<String> stack = table.get(name);
         names.append(delim).append(name);
         counts.append(delim).append(stack.size());
-        for (int i=0; i<stack.size();i++) {
+        for (int i=0; i < stack.size(); i++) {
           p.put(name + delim + i, stack.elementAt(i));
         }
         delim = DELIM;
@@ -1339,8 +1354,9 @@ public class MiscTemplate extends Template {
     } else {
       Convert cvt = null;
       try {
-        Class<?> cls = Class.forName(hr.get(name + ".class", null));
-        cvt = (Convert) cls.newInstance();
+        Class<? extends Convert> cls = 
+            Class.forName(hr.get(name + ".class", null)).asSubclass(Convert.class);
+        cvt = cls.newInstance();
         converters.put(name, cvt);
         hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
                 "Installing converter: " + name);
@@ -1360,6 +1376,7 @@ public class MiscTemplate extends Template {
    */
 
   static class NullConverter implements Convert {
+    @Override
     public String convert(RewriteContext hr, String name, String value) {
       hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
               "Ignoring converter: " + name);

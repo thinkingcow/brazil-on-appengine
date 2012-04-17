@@ -486,6 +486,7 @@ public class WebMountHandler implements Handler {
    */
 
   String hostPart(String url) {
+    System.err.println("Got url: " + url);
     return url.substring(url.indexOf("/")+2, url.indexOf("/", 8));
   }
 

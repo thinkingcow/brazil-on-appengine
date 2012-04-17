@@ -176,270 +176,270 @@ import java.util.Properties;
  */
 
 public class MacroTemplate extends Template {
-    public Properties macroTable=null;	// session specific definitions
-    Properties initial=null;		// initial and global properties
-    boolean shouldSubst = false;
+  public Properties macroTable=null;	// session specific definitions
+  protected Properties initial=null;		// initial and global properties
+  boolean shouldSubst = false;
 
-    /**
-     * Read in the inital macros, if needed.
-     */
+  /**
+   * Read in the inital macros, if needed.
+   */
+
+  @Override
+  public boolean
+  init(RewriteContext hr) {
+    hr.addClosingTag("definemacro");
+    shouldSubst = (hr.request.getProps().getProperty(hr.prefix + "subst") != null);
+
+    // Load in initial macros if macro table doesn't yet exist
+
+    if (macroTable == null) {
+      initial = (Properties) 
+      SessionManager.getSession(hr.prefix, "Macros",
+          Properties.class);
+      String init = hr.request.getProps().getProperty(hr.prefix + "init");
+      if (init != null && initial.isEmpty()) {
+        loadInitial(hr, init);
+      }
+      macroTable = new Properties(initial);
+    }
+    return super.init(hr);
+  }
+
+  /**
+   * load initial macros, if any.
+   * XXX  We should load from an XML file, not a properties file.
+   */
+
+  void loadInitial_old(RewriteContext hr, String init) {
+    try {
+      InputStream in = ResourceHandler.getResourceStream(
+          hr.request.getProps(), hr.prefix, init);
+      initial.load(in);
+      in.close();
+      hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
+          "loading initial macros: " + initial.toString());
+    } catch (IOException e) {
+      hr.request.log(Server.LOG_WARNING, hr.prefix,
+          "Can't find macro init file: " + init);
+    }
+  }
+
+  /**
+   * Load initial macros from xml file.  All markup outside of
+   * the "definemacro" and "/definemacro" tags are ignored
+   * If a "subst" attribute is found, then evaluate all ${..} against
+   * server.props before saving the macro body.  "subst" only applies
+   * for the "init" macro table.
+   */
+
+  protected void loadInitial(RewriteContext hr, String init) {
+    String src = null;
+    try {
+      src = getInitialSrc(hr, init);
+    } catch (IOException e) {
+      hr.request.log(Server.LOG_WARNING, hr.prefix,
+          "Can't find macro init file: " + init);
+    }
+    LexML lex = new LexML(src);
+    while (lex.nextToken()) {
+      if (lex.getType()==LexML.TAG &&
+          lex.getTag().equals("definemacro")) {
+        String name=Format.deQuote(lex.getAttributes().get("name"));
+        if (name==null || name.trim().equals("")) {
+          continue;
+        }
+        boolean doSubst = (lex.getAttributes().get("subst") != null);
+        String value = snarfTillClose(lex, "definemacro").trim();
+        if (doSubst) {
+          value = Format.subst(hr.server.getProps(), value);
+        }
+        if (!value.equals("")) {
+          initial.put(name, value);
+          hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
+              "initial macro: [" + name + "] (" + value.length() +
+          " chars)");
+        } else {
+          initial.remove(name);
+        }
+      } else {
+        // System.out.println("Skipping tag: " + lex.getToken());
+      }
+    }
+    // initial.save(System.out, hr.prefix + " initial macros");
+  }
+
+  /**
+   * Fetch the String that represents the initial macro configuration.
+   */
+  protected String getInitialSrc(RewriteContext hr, String init) throws IOException {
+    return ResourceHandler.getResourceString(hr.request.getProps(), hr.prefix, init);
+  }
+
+  /**
+   * Grab all the markup starting from the current tag until
+   * the matching closing tag, and return as a string.
+   */
+
+  public static String snarfTillClose(LexML lex, String tag) {
+    if (!lex.isSingleton()) {
+      StringBuffer sb = new StringBuffer();
+      String start = "<" + tag + " ";
+      String end = "</" + tag + ">"; // XXX not quite
+      int nest = 0;  // set nesting level
+      sb = new StringBuffer();
+      while (lex.nextToken()) {
+        String t = lex.getToken();
+        lex.getTag();	// force singleton checking!
+        if (t.startsWith(start) && !lex.isSingleton()) {
+          nest++;
+        } else if (t.equals(end) && (--nest < 0)) {
+          break;
+        }
+        sb.append(t);
+      }
+      return sb.toString();
+    } else {
+      return "";
+    }
+  }
+
+  /**
+   * Define a new macro. use "name" as the macro name. Once defined, the tag
+   * <code>&lt;name ...&gt;</code> will be replaced by the contents of the macro
+   * named "name".
+   * <pre>
+   * &lt;definemacro name=nnn [global=true|false]&gt;...&lt;/definemacro&gt;
+   * </pre>
+   * <ul>
+   * <li>If "global" is true, then the macro is defined for the entire server, otherwise
+   * it is for the session only.
+   * <li>if the body of the macro is an empty string, the macro definition is removed
+   * <li>Macros defined for the session override the global ones.
+   * <li><code>&lt;definemacro nnn&gt;</code> is a shortcut for
+   *     <code>&lt;definemacro name=nnn&gt;</code>
+   * </ul>
+   */
+
+  public void
+  tag_definemacro(RewriteContext hr) {
+    String name =  hr.get("name");
+    boolean global = hr.isTrue("global");
+
+    if (name == null) {
+      name = hr.getArgs();
+    }
+    if (name == null) {
+      return;
+    }
+    debug(hr);
+    boolean was = hr.accumulate(false);
+    hr.nextToken();
+    String body = hr.getBody().trim();
+    hr.accumulate(was);
+    Properties p = global ? initial : macroTable;
+    if (body.equals("")) {
+      p.remove(name);
+      hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
+          "removing macro: " + name);
+    } else {
+      p.put(name, body);
+      // XXX we should keep formal parameter list for defaults here
+      hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
+          "creating macro: [" + name + "] (" + body.length() + 
+          (p==initial ? ") global" : ") local"));
+    }
+    hr.nextToken();	// eat the /definemacro
+    debug(hr);
+    hr.killToken();
+  }
+
+  /**
+   * Run the macro, push formal parameters on the stack first.
+   * This examimes all non-processed tags to see if they are macros,
+   * and processes those that are.
+   * <p>
+   * If the parameter <code>defer=true</code> is present, the text of the macro is output
+   * directly, with only ${..} substitutions performed.  Otherwise, the markup in the macro
+   * body is rescanned and processed.
+   * <p>
+   * If "noEsc" is true, the \'s are left alone except for "\$", which still escapes ${..}.
+   */
+
+  public void
+  defaultTag(RewriteContext hr) {
+    String tag = hr.getTag();
+    String script = macroTable.getProperty(tag);
+    if (script != null) {
+      debug(hr);
+      String body =  Format.subst(new Props(hr), script, hr.isTrue("noEsc"));
+      hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, "macro appending\n{" + body + "\n}");
+      if (!hr.isTrue("defer")) {
+        String rest = hr.lex.rest();
+        if (rest != null) {
+          hr.lex.replace(body + rest);
+        } else {
+          hr.lex.replace(body);
+        }
+        hr.killToken();
+      } else {
+        hr.append(body);
+      }
+    } else if (shouldSubst) {
+      Enumeration<String> e = hr.keys();
+      while (e.hasMoreElements()) {
+        String key = e.nextElement();
+        hr.put(key, hr.get(key));
+      }
+    }
+  }
+
+  /**
+   * Special Properties class for use with format.subst() that will
+   * return any formal parameters first, then look in request props.
+   */
+
+  static class Props extends Properties {
+    RewriteContext hr;
+    String args = null;
+
+    Props(RewriteContext hr) {
+      this.hr=hr;
+    }
 
     @Override
-    public boolean
-    init(RewriteContext hr) {
-	hr.addClosingTag("definemacro");
-	shouldSubst = (hr.request.getProps().getProperty(hr.prefix + "subst") != null);
-
-	// Load in initial macros if macro table doesn't yet exist
-
-        if (macroTable == null) {
-	    initial = (Properties) 
-			SessionManager.getSession(hr.prefix, "Macros",
-			Properties.class);
-	    String init = hr.request.getProps().getProperty(hr.prefix + "init");
-	    if (init != null && initial.isEmpty()) {
-		loadInitial(hr, init);
-	    }
-	    macroTable = new Properties(initial);
-	}
-	return super.init(hr);
-    }
-
-    /**
-     * load initial macros, if any.
-     * XXX  We should load from an XML file, not a properties file.
-     */
-
-    void loadInitial_old(RewriteContext hr, String init) {
-       try {
-	   InputStream in = ResourceHandler.getResourceStream(
-		   hr.request.getProps(), hr.prefix, init);
-	   initial.load(in);
-	   in.close();
-	   hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
-		   "loading initial macros: " + initial.toString());
-       } catch (IOException e) {
-	   hr.request.log(Server.LOG_WARNING, hr.prefix,
-		   "Can't find macro init file: " + init);
-       }
-    }
-
-    /**
-     * Load initial macros from xml file.  All markup outside of
-     * the "definemacro" and "/definemacro" tags are ignored
-     * If a "subst" attribute is found, then evaluate all ${..} against
-     * server.props before saving the macro body.  "subst" only applies
-     * for the "init" macro table.
-     */
-
-    protected void loadInitial(RewriteContext hr, String init) {
-      String src = null;
-      try {
-        src = getInitialSrc(hr, init);
-      } catch (IOException e) {
-        hr.request.log(Server.LOG_WARNING, hr.prefix,
-                "Can't find macro init file: " + init);
-      }
-      LexML lex = new LexML(src);
-      while (lex.nextToken()) {
-        if (lex.getType()==LexML.TAG &&
-                lex.getTag().equals("definemacro")) {
-          String name=Format.deQuote(lex.getAttributes().get("name"));
-          if (name==null || name.trim().equals("")) {
-            continue;
-          }
-          boolean doSubst = (lex.getAttributes().get("subst") != null);
-          String value = snarfTillClose(lex, "definemacro").trim();
-          if (doSubst) {
-            value = Format.subst(hr.server.getProps(), value);
-          }
-          if (!value.equals("")) {
-            initial.put(name, value);
-            hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
-                    "initial macro: [" + name + "] (" + value.length() +
-            " chars)");
-          } else {
-            initial.remove(name);
-          }
-        } else {
-          // System.out.println("Skipping tag: " + lex.getToken());
+    public String
+    getProperty(String key) {
+      String value = hr.get(key);
+      if (value == null &&
+          (value = hr.request.getProps().getProperty(key)) == null) {
+        if (key.equals("isSingleton")) {
+          value = hr.isSingleton() ? "true" : "false";
+        } else if (key.equals("args")) {
+          return hr.getArgs();
         }
       }
-      // initial.save(System.out, hr.prefix + " initial macros");
+      return value;
     }
+  }
 
-    /**
-     * Fetch the String that represents the initial macro configuration.
-     */
-    protected String getInitialSrc(RewriteContext hr, String init) throws IOException {
-      return ResourceHandler.getResourceString(hr.request.getProps(), hr.prefix, init);
+  /**
+   * Convert stdin properties format macro definition files
+   * to the new template style.  Use this to update to the new
+   * initial macro template format.
+   */
+
+  public static void main(String args[]) throws IOException {
+    Properties in = new Properties();
+    in.load(System.in);
+    System.out.println("<!-- converted MacroTemplate init file -->");
+    Enumeration e = in.keys();
+    while (e.hasMoreElements()) {
+      String key = (String) e.nextElement();
+      String value = in.getProperty(key);
+      System.out.println("\n<definemacro name=\"" + key + 
+      "\" global=\"true\">");
+      System.out.println("  " + value);
+      System.out.println("</definemacro>");
     }
-
-    /**
-     * Grab all the markup starting from the current tag until
-     * the matching closing tag, and return as a string.
-     */
-    
-    public static String snarfTillClose(LexML lex, String tag) {
-	if (!lex.isSingleton()) {
-	    StringBuffer sb = new StringBuffer();
-	    String start = "<" + tag + " ";
-	    String end = "</" + tag + ">"; // XXX not quite
-	    int nest = 0;  // set nesting level
-	    sb = new StringBuffer();
-	    while (lex.nextToken()) {
-		String t = lex.getToken();
-		lex.getTag();	// force singleton checking!
-		if (t.startsWith(start) && !lex.isSingleton()) {
-		    nest++;
-		} else if (t.equals(end) && (--nest < 0)) {
-		    break;
-		}
-		sb.append(t);
-	    }
-	    return sb.toString();
-	} else {
-	    return "";
-	}
-    }
-
-    /**
-     * Define a new macro. use "name" as the macro name. Once defined, the tag
-     * <code>&lt;name ...&gt;</code> will be replaced by the contents of the macro
-     * named "name".
-     * <pre>
-     * &lt;definemacro name=nnn [global=true|false]&gt;...&lt;/definemacro&gt;
-     * </pre>
-     * <ul>
-     * <li>If "global" is true, then the macro is defined for the entire server, otherwise
-     * it is for the session only.
-     * <li>if the body of the macro is an empty string, the macro definition is removed
-     * <li>Macros defined for the session override the global ones.
-     * <li><code>&lt;definemacro nnn&gt;</code> is a shortcut for
-     *     <code>&lt;definemacro name=nnn&gt;</code>
-     * </ul>
-     */
-
-    public void
-    tag_definemacro(RewriteContext hr) {
-	String name =  hr.get("name");
-	boolean global = hr.isTrue("global");
-
-	if (name == null) {
-	    name = hr.getArgs();
-	}
-	if (name == null) {
-	    return;
-	}
-	debug(hr);
-	boolean was = hr.accumulate(false);
-	hr.nextToken();
-	String body = hr.getBody().trim();
-	hr.accumulate(was);
-	Properties p = global ? initial : macroTable;
-	if (body.equals("")) {
-	   p.remove(name);
-	   hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
-			"removing macro: " + name);
-	} else {
-	   p.put(name, body);
-	   // XXX we should keep formal parameter list for defaults here
-	   hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
-			"creating macro: [" + name + "] (" + body.length() + 
-			(p==initial ? ") global" : ") local"));
-        }
-	hr.nextToken();	// eat the /definemacro
-	debug(hr);
-	hr.killToken();
-    }
-
-    /**
-     * Run the macro, push formal parameters on the stack first.
-     * This examimes all non-processed tags to see if they are macros,
-     * and processes those that are.
-     * <p>
-     * If the parameter <code>defer=true</code> is present, the text of the macro is output
-     * directly, with only ${..} substitutions performed.  Otherwise, the markup in the macro
-     * body is rescanned and processed.
-     * <p>
-     * If "noEsc" is true, the \'s are left alone except for "\$", which still escapes ${..}.
-     */
-
-    public void
-    defaultTag(RewriteContext hr) {
-      String tag = hr.getTag();
-      String script = macroTable.getProperty(tag);
-      if (script != null) {
-        debug(hr);
-        String body =  Format.subst(new Props(hr), script, hr.isTrue("noEsc"));
-        hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, "macro appending\n{" + body + "\n}");
-        if (!hr.isTrue("defer")) {
-          String rest = hr.lex.rest();
-          if (rest != null) {
-            hr.lex.replace(body + rest);
-          } else {
-            hr.lex.replace(body);
-          }
-          hr.killToken();
-        } else {
-          hr.append(body);
-        }
-      } else if (shouldSubst) {
-        Enumeration<String> e = hr.keys();
-        while (e.hasMoreElements()) {
-          String key = e.nextElement();
-          hr.put(key, hr.get(key));
-        }
-      }
-    }
-
-    /**
-     * Special Properties class for use with format.subst() that will
-     * return any formal parameters first, then look in request props.
-     */
-
-    static class Props extends Properties {
-        RewriteContext hr;
-	String args = null;
-
-	Props(RewriteContext hr) {
-	    this.hr=hr;
-	}
-
-	@Override
-  public String
-	getProperty(String key) {
-	    String value = hr.get(key);
-	    if (value == null &&
-		    (value = hr.request.getProps().getProperty(key)) == null) {
-		if (key.equals("isSingleton")) {
-		    value = hr.isSingleton() ? "true" : "false";
-		} else if (key.equals("args")) {
-		    return hr.getArgs();
-		}
-	    }
-	    return value;
-	}
-    }
-
-    /**
-     * Convert stdin properties format macro definition files
-     * to the new template style.  Use this to update to the new
-     * initial macro template format.
-     */
-
-    public static void main(String args[]) throws IOException {
-	Properties in = new Properties();
-	in.load(System.in);
-	System.out.println("<!-- converted MacroTemplate init file -->");
-	Enumeration e = in.keys();
-	while (e.hasMoreElements()) {
-	    String key = (String) e.nextElement();
-	    String value = in.getProperty(key);
-	    System.out.println("\n<definemacro name=\"" + key + 
-		    "\" global=\"true\">");
-	    System.out.println("  " + value);
-	    System.out.println("</definemacro>");
-	}
-    }
+  }
 }

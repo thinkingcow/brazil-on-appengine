@@ -75,8 +75,8 @@
 
 /* MODIFICATIONS
  * 
- * Modifications to this file are derived, directly or indirectly, from Original Code provided by the
- * Initial Developer and are Copyright 2010-2011 Google Inc.
+ * Modifications to this file are derived, directly or indirectly, from Original Code provided
+ * by the Initial Developer and are Copyright 2010-2012 Google Inc.
  * See Changes.txt for a complete list of changes from the original source code.
  */
 
@@ -191,7 +191,7 @@ public class FetchTemplate extends Template {
     String name = hr.get("name");	// the variable to put the result in
     String post = hr.get("post");	// post data (if any) DEPRECATED - use body`
     String body = hr.get("body");	// post data (if any)
-    String method = hr.get("method","GET").toUpperCase();	// the method
+    String method = hr.get("method", "GET").toUpperCase();	// the method
     boolean follow = !hr.isTrue("nofollow");  // follow redirects
     boolean addClientHeaders = hr.isTrue("addclientheaders");
     String addHeaders = hr.get("addheaders"); // names of headers to add
@@ -201,6 +201,7 @@ public class FetchTemplate extends Template {
     }
     
     HttpURLConnection con;
+    hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, "Fetching: (" + href + ")");
     try {
       URL target = new URL(href);
       con = (HttpURLConnection) target.openConnection();
@@ -262,6 +263,7 @@ public class FetchTemplate extends Template {
         out.close();
       }
      
+      long startTime = System.currentTimeMillis();
       con.connect();
       // this must be first to force an IOException if something went wrong.
       // If we getResponseMessage() first, we get a runtime exception instead
@@ -269,7 +271,7 @@ public class FetchTemplate extends Template {
       hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, con.getResponseMessage() + " " + 
               con.getHeaderFields());
       if (getHeaders != null) {
-        for(Map.Entry<String, List<String>> entry : con.getHeaderFields().entrySet()) {
+        for (Map.Entry<String, List<String>> entry : con.getHeaderFields().entrySet()) {
           String base = entry.getKey();
           if (base == null) {
             continue;
@@ -280,7 +282,7 @@ public class FetchTemplate extends Template {
             hr.request.getProps().put(key, "" + values.get(0));
           } else if (values.size() > 1) {
             String build = values.get(0).toString();
-            for(int i = 1;i < values.size();i++) {
+            for (int i = 1; i < values.size(); i++) {
               build += ", " + values.get(i);
             }
             hr.request.getProps().put(key, "" + build);
@@ -298,6 +300,10 @@ public class FetchTemplate extends Template {
         bo.write(buf, 0, read);
       }
       in.close();
+      if (getHeaders != null) {
+        hr.request.getProps().put(getHeaders + ".timeMillis",
+                "" + (System.currentTimeMillis() - startTime));
+      }
       String data = bo.toString();
 
       if (name != null) {

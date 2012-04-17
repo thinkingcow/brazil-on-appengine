@@ -27,11 +27,11 @@ import java.io.IOException;
  */
 
 public class AndrogenMacroTemplate extends MacroTemplate {
-  private int count=0;
+  private int count = 0;
   
   @Override
   public boolean init(RewriteContext hr) {
-    count=0;
+    count = 0;
     hr.request.getProps().put(hr.prefix + "subst", "true");
     return super.init(hr);
   }
@@ -41,6 +41,19 @@ public class AndrogenMacroTemplate extends MacroTemplate {
     if (!hr.isSingleton()) {
       count++;
     }
+  }
+  
+  /**
+   * Reset the global macro table.
+   * "src" is the absolute path to use to repopulate the table
+   */
+  
+  public void tag_resetglobalmacros(RewriteContext hr) {
+    hr.killToken();
+    initial.clear();
+    loadInitial(hr, hr.get("init", "init.macros"));
+    hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
+          "Reset initial macros: " + initial);
   }
  
   /**
@@ -58,9 +71,12 @@ public class AndrogenMacroTemplate extends MacroTemplate {
     String namespace = hr.get("namespace", "brazil");
     Resource resource = Resource.load(namespace + init);
     if (resource == null) {
+      hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, "missing: " + init);
       throw new IOException("Missing initial macros: " + namespace + init);
     }
-    return resource.getData().toString();
+    String result = new String(resource.getData());
+    hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, init + " (" + result + ")");
+    return result;
   }
   
   // Templates are discovered by introspection in "this" class only

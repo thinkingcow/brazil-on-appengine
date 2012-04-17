@@ -1,4 +1,4 @@
-/*Copyright 2010-2011 Google Inc.
+/*Copyright 2010-2012 Google Inc.
  *
  *Licensed under the Apache License, Version 2.0 (the "License");
  *you may not use this file except in compliance with the License.
@@ -33,11 +33,13 @@ import java.io.IOException;
 public class DownloadResourceHandler implements Handler {
   MatchString isMine;
   String namespace;
+  String strip = null;  // strip from URL before fetching
 
   @Override
   public boolean init(Server server, String prefix) {
     isMine = new MatchString(prefix, server.getProps());
     namespace = server.getProps().getProperty(prefix + "namespace", "brazil");
+    strip = server.getProps().getProperty(prefix + "strip");
     return true;
   }
 
@@ -60,7 +62,7 @@ public class DownloadResourceHandler implements Handler {
     
     // XXX Use file suffix for type instead of intrinsic type (for now)
     String type = FileHandler.getMimeType(request.getUrl(), request.getProps(), isMine.prefix());
-    request.log(Server.LOG_DIAGNOSTIC, isMine.prefix(),"type: " + type);
+    request.log(Server.LOG_DIAGNOSTIC, isMine.prefix(), "type: " + type);
     if (type == null) {
       return false;
     }
@@ -69,9 +71,14 @@ public class DownloadResourceHandler implements Handler {
     if (root.equals(".") || root.equals("/")) {
       root = "";
     }
-    Resource resource = Resource.load(namespace + root + request.getUrl());
+    
+    String url = request.getUrl();
+    if (strip != null && url.startsWith(strip)) {
+      url = url.substring(strip.length());
+    }
+    Resource resource = Resource.load(namespace + root + url);
     if (resource == null) {
-      request.log(Server.LOG_DIAGNOSTIC, isMine.prefix(),"No template " + namespace + " + " +
+      request.log(Server.LOG_DIAGNOSTIC, isMine.prefix(), "No template " + namespace + " + " +
               root + " + " + request.getUrl());
       return false;
     }

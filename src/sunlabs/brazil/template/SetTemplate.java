@@ -449,6 +449,7 @@ import java.util.Vector;
  *		<li><b>timestamp</b> A timestamp (in ms since epoch) from when
  *			this request was first accepted.
  *		<li><b>url</b> The current url.
+ *		<li><b>urlall</b> The current url with the query string attached
  *		<li><b>hostname, hostport</b> The name and port parts of the
  *		"host" header, if set.
  *              </ul>
@@ -520,6 +521,12 @@ public class SetTemplate extends Template implements Serializable, Handler {
       props.put(headers + "method", hr.request.getMethod());
       props.put(headers + "url", props.getProperty("url.orig"));
       props.put(headers + "query", hr.request.getQuery());
+      if (hr.request.getQuery().length() > 0) {
+        props.put(headers + "urlall", props.getProperty("url.orig") + "?" + 
+            hr.request.getQuery());
+      } else {
+        props.put(headers + "urlall", props.getProperty("url.orig"));
+      }
 
       String protocol = hr.request.getServerProtocol() == null ?
           hr.request.server.getProtocol() :  hr.request.getServerProtocol();
