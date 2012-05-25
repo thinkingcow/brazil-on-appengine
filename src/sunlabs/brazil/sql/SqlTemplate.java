@@ -312,6 +312,9 @@ public class SqlTemplate extends Template {
    * <dt>noTable	<dd>If true, the table name is not encoded as
    *			part of the result
    * <dt>close	<dd>If true, the database copnnection will be closed after the query conpletes.
+   * <dt>namespace<dd>
+   * All results are placed into the "request" namespace unless "namespace" is specified
+   * to override it
    * </dl>
    * For all queries, the following properties (with the prefix prepended)
    * are set:
@@ -332,7 +335,8 @@ public class SqlTemplate extends Template {
     String type = hr.get("type", "query");
     boolean useIndex = hr.isTrue("index");
     boolean zeroIndex = hr.isTrue("zeroIndex");
-    Properties props = hr.request.getProps();
+    // Properties props = hr.request.getProps();
+    Properties props = hr.getNamespaceProperties();
     String na = hr.get("na", "n/a");
     String database = hr.get("database", hr.prefix);
     boolean shouldClose = hr.isTrue("close");

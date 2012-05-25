@@ -77,6 +77,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import sunlabs.brazil.properties.SubstPropsHandler.NullConverter;
 import sunlabs.brazil.template.RewriteContext;
 import sunlabs.brazil.template.Template;
 import sunlabs.brazil.util.Format;
@@ -86,6 +87,7 @@ import java.util.Properties;
 import java.util.Stack;
 import java.util.StringTokenizer;
 import java.util.Vector;
+import java.util.regex.Pattern;
 
 /**
  * Template for generating (or extracting) JSON format data.
@@ -136,12 +138,16 @@ import java.util.Vector;
  * <li> Error handling is currently incomplete, the code tries to
  * to guess what is intended in the face of errors.
  * </ul>
+ * <p>
+ * The helper class "JsonString" may be used as a filter (see SubstPropsHandler)
+ * to make it easier to generate JSON in templates.
  */
 
 public class JSONTemplate extends Template {
 
   private static final String ARRAY_COUNT_SUFFIX = "_Count";
   private static final String ARRAY_INDECES_SUFFIX = "_Indeces";
+  private static final String OBJECT_INDECES_SUFFIX = "_Items";
   Vector<String> items = new Vector<String>(); // list of items to JSONify
   Stack<Object> stack = new Stack<Object>();   // Json Stack
   // Stack stack = new MyStack();   // Json Stack
@@ -489,9 +495,11 @@ public class JSONTemplate extends Template {
     if (obj instanceof JSONObject) {
       JSONObject jo = (JSONObject) obj;
       String items[] = JSONObject.getNames(jo);
-      for (int i = 0; i < items.length; i++) {
+      for (int i = 0; items != null && i < items.length; i++) {
         flatten(prefix + delim + items[i], delim, p, jo.get(items[i]));
       }
+      // XXX need to be able to specify alternate delimiter
+      // p.put(prefix + OBJECT_INDECES_SUFFIX, joinWithSpace(items));
     } else if (obj instanceof JSONArray) {
       JSONArray ja = (JSONArray) obj;
       for (int i = 0; i < ja.length(); i++) {
@@ -504,6 +512,22 @@ public class JSONTemplate extends Template {
       p.put(prefix, obj == null ? "null" : obj.toString());
     }
   }
+  
+  
+   /**
+    * Join a String with a single space
+    * XXX Temporary 'til I come up with a better delim escaping strategy
+    */
+  
+   private static Pattern matchSpace = Pattern.compile(" ");
+   private static String joinWithSpace(String[] items) {
+     StringBuilder sb = new StringBuilder();
+     for (String item : items) {
+       sb.append(matchSpace.matcher(item).replaceAll("\\s")).append(" ");
+     }
+     sb.setLength(sb.length() - 1);
+     return sb.toString();
+   }
   
   /**
    * Generate a list of array indeces
@@ -600,6 +624,8 @@ public class JSONTemplate extends Template {
         node = (JSONObject) jo.get(name);
       } catch (JSONException e) {
         node = new JSONObject();
+      } catch (ClassCastException e) { // XXX shouldn't happen!
+        node = new JSONObject();
       }
       jo.put(name, add(node, st, value));
     } else {
@@ -689,7 +715,6 @@ public class JSONTemplate extends Template {
   @Override
   public boolean
   done(RewriteContext hr) {
-
     boolean idt = (hr.request.getProps().getProperty(hr.prefix + "indent") != null);
     boolean show = hr.request.getProps().getProperty(hr.prefix + "show") != null;
     String type = hr.request.getProps().getProperty(hr.prefix + "type");
@@ -785,7 +810,7 @@ public class JSONTemplate extends Template {
    */
 
   void oops(RewriteContext hr, String message) {
-    System.out.println("Parse error at " + hr.getTag() + ": " +
+    System.out.println("Parse error at " + hr.getToken() + ": " +
             message);
     System.out.println("- Stack size: " + stack.size());
     if (stack.size() > 0) {
@@ -816,6 +841,16 @@ public class JSONTemplate extends Template {
     public String toString() {
       return "item(" + name + "," +
       (value == null ? "null" : value.toString()) + ")";
+    }
+  }
+  
+  /**
+   * Filter for properly escaping JSON Strings (add the "'s).
+   */
+  public static class JsonString extends NullConverter {
+    @Override
+    public String map(String value) {
+      return JSONObject.quote(value);
     }
   }
 

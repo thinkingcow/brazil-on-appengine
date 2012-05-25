@@ -233,6 +233,8 @@ import java.util.StringTokenizer;
  * in the SetTemplate class.
  * If replace is not specified, the "match" is deleted, if "newname" is supplied, it is
  * set with the replaced value, otherwise "name" is modified.
+ * <dt>&lt;tossmarkup&gt;
+ * <dd>Toss all the markup generated to this point.
  * </dl>
  */
 
@@ -620,7 +622,7 @@ public class MiscTemplate extends Template {
 
   /**
    * Set a variable to all the markup 'till the /inline tag.
-   * &lt;inline name="..." [eval=true|false] [append=true|false]&gt;
+   * &lt;inline name="..." [eval=true|false] [append=true|false] [notrim=true|false]&gt;
    * ...
    * &lt;/inline&gt;
    * <p>
@@ -631,7 +633,10 @@ public class MiscTemplate extends Template {
    *  then the markup is appended to the current contents of "name".
    * If no "name" is specified, the markup is output as-is, after
    * ${..} substitutions (e.g. eval=true is implied).
+   * <ul>
    * <li>params: If true (and eval is true) all attributes are made available for
+   * <li>notrim: If true, whitespace is not trimmed from the front and back of the contents
+   * </ul>
    * substitution
    */
 
@@ -641,6 +646,7 @@ public class MiscTemplate extends Template {
     boolean append =  hr.isTrue("append");
     boolean noesc = !hr.isTrue("esc");
     boolean params = hr.isTrue("params");
+    boolean trim = !hr.isTrue("notrim");
 
     debug(hr);
     hr.killToken();
@@ -650,7 +656,7 @@ public class MiscTemplate extends Template {
     }
     boolean was = hr.accumulate(false);
     hr.nextToken();
-    String body = hr.getBody().trim();
+    String body = trim ? hr.getBody().trim() : hr.getBody();
     hr.accumulate(was);
     hr.nextToken();	// eat the </inline>
     hr.killToken();
@@ -763,6 +769,15 @@ public class MiscTemplate extends Template {
     }
     hr.request.getProps().put(name, "" + value.length());
   }
+  
+  /**
+   * Toss all markup generated to this point.
+   */
+  public void tag_tossmarkup(RewriteContext hr) {
+    hr.killToken();
+    hr.sb = new StringBuffer();
+  }
+
 
   /**
    * Trim the string "value".

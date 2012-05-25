@@ -160,6 +160,11 @@ import java.util.Properties;
  *     templates will have all ${..} contructs in attribute
  *     values substituted.  This subsumes the function of the 
  *     "SubstAllTemplate".
+ * <dt>macrodebug
+ * <dd>If set to true, then the text of the macro will be emitted as an html comment.
+ * <dt>localargs
+ * <dd>If set to true, than only variables defined in the argument list will be
+ * considered during variable interpolation.
  * </dl>
  * <p>
  * This is an experiment. The current implementation is flawed, although
@@ -176,6 +181,16 @@ import java.util.Properties;
  */
 
 public class MacroTemplate extends Template {
+  private static final String DEFINEMACRO = "definemacro";
+  private static final String INITIAL_MACROS = "init";
+  private static final String MACROS = "Macros";
+  private static final String SUBST = "subst";
+  private static final String GLOBAL_ATTRIBUTE = "global";
+  private static final String NAME_ATTRIBUTE = "name";
+  private static final String MACRODEBUG = "macrodebug";
+  private static final String NO_ESC = "noEsc";
+  private static final String LOCALARGS = "localargs";
+  
   public Properties macroTable=null;	// session specific definitions
   protected Properties initial=null;		// initial and global properties
   boolean shouldSubst = false;
@@ -187,16 +202,16 @@ public class MacroTemplate extends Template {
   @Override
   public boolean
   init(RewriteContext hr) {
-    hr.addClosingTag("definemacro");
-    shouldSubst = (hr.request.getProps().getProperty(hr.prefix + "subst") != null);
+    hr.addClosingTag(DEFINEMACRO);
+    shouldSubst = (hr.request.getProps().getProperty(hr.prefix + SUBST) != null);
 
     // Load in initial macros if macro table doesn't yet exist
 
     if (macroTable == null) {
       initial = (Properties) 
-      SessionManager.getSession(hr.prefix, "Macros",
+      SessionManager.getSession(hr.prefix, MACROS,
           Properties.class);
-      String init = hr.request.getProps().getProperty(hr.prefix + "init");
+      String init = hr.request.getProps().getProperty(hr.prefix + INITIAL_MACROS);
       if (init != null && initial.isEmpty()) {
         loadInitial(hr, init);
       }
@@ -243,13 +258,13 @@ public class MacroTemplate extends Template {
     LexML lex = new LexML(src);
     while (lex.nextToken()) {
       if (lex.getType()==LexML.TAG &&
-          lex.getTag().equals("definemacro")) {
-        String name=Format.deQuote(lex.getAttributes().get("name"));
+          lex.getTag().equals(DEFINEMACRO)) {
+        String name=Format.deQuote(lex.getAttributes().get(NAME_ATTRIBUTE));
         if (name==null || name.trim().equals("")) {
           continue;
         }
-        boolean doSubst = (lex.getAttributes().get("subst") != null);
-        String value = snarfTillClose(lex, "definemacro").trim();
+        boolean doSubst = (lex.getAttributes().get(SUBST) != null);
+        String value = snarfTillClose(lex, DEFINEMACRO).trim();
         if (doSubst) {
           value = Format.subst(hr.server.getProps(), value);
         }
@@ -322,8 +337,8 @@ public class MacroTemplate extends Template {
 
   public void
   tag_definemacro(RewriteContext hr) {
-    String name =  hr.get("name");
-    boolean global = hr.isTrue("global");
+    String name =  hr.get(NAME_ATTRIBUTE);
+    boolean isGlobal = hr.isTrue(GLOBAL_ATTRIBUTE);
 
     if (name == null) {
       name = hr.getArgs();
@@ -336,7 +351,7 @@ public class MacroTemplate extends Template {
     hr.nextToken();
     String body = hr.getBody().trim();
     hr.accumulate(was);
-    Properties p = global ? initial : macroTable;
+    Properties p = isGlobal ? initial : macroTable;
     if (body.equals("")) {
       p.remove(name);
       hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
@@ -370,10 +385,13 @@ public class MacroTemplate extends Template {
     String tag = hr.getTag();
     String script = macroTable.getProperty(tag);
     if (script != null) {
-      debug(hr);
-      String body =  Format.subst(new Props(hr), script, hr.isTrue("noEsc"));
+      boolean localOnly = !hr.isTrue(LOCALARGS);
+      String body =  Format.subst(new Props(hr, localOnly), script, hr.isTrue(NO_ESC));
       hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, "macro appending\n{" + body + "\n}");
       if (!hr.isTrue("defer")) {
+        if (Format.isTrue(hr.get(MACRODEBUG, "false"))) {
+          body = Template.makeHtmlComment(hr.getToken() + ":\n" + body) + "\n" + body;
+        }
         String rest = hr.lex.rest();
         if (rest != null) {
           hr.lex.replace(body + rest);
@@ -400,23 +418,32 @@ public class MacroTemplate extends Template {
 
   static class Props extends Properties {
     RewriteContext hr;
+    boolean useRequestProps;
     String args = null;
+    
+    /**
+     * @param hr
+     * @param useRerequestProps if true, then use request properties, otherwise use
+     * only the local parameters
+     */
 
-    Props(RewriteContext hr) {
+    Props(RewriteContext hr, boolean useRequestProps) {
       this.hr=hr;
+      this.useRequestProps = useRequestProps;
     }
 
     @Override
     public String
     getProperty(String key) {
       String value = hr.get(key);
-      if (value == null &&
-          (value = hr.request.getProps().getProperty(key)) == null) {
-        if (key.equals("isSingleton")) {
-          value = hr.isSingleton() ? "true" : "false";
-        } else if (key.equals("args")) {
-          return hr.getArgs();
-        }
+      if (value == null && useRequestProps) {
+        value = hr.request.getProps().getProperty(key);
+      }
+      if (value == null && key.equals("isSingleton")) {
+        value = hr.isSingleton() ? "true" : "false";
+      }
+      if (value == null  && key.equals("args")) {
+        value = hr.getArgs();
       }
       return value;
     }

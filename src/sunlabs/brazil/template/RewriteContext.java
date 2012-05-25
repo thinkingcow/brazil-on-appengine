@@ -356,11 +356,16 @@ public class RewriteContext extends HtmlRewriter {
 
     public String
     get(String name, String dflt) {
-	String result = get(name);
-	if (result == null) {
-	    result = request.getProps().getProperty(prefix + name, dflt);
-	}
-	return result;
+      String result = get(name);
+      return result == null ? getProps(name, dflt) : result;
+    }
+    
+    /**
+     * Fetch the property in the request properties, ignoring any attributes
+     */
+    
+    public String getProps(String name, String dflt) {
+      return request.getProps().getProperty(prefix + name, dflt);
     }
 
     /**
@@ -476,7 +481,7 @@ public class RewriteContext extends HtmlRewriter {
     /**
      * Get the proper properties table based on the "namespace"
      * attribute. The namespaces "local" (the default) and "server"
-     * are special. The "sessionTable" cinfiguration
+     * are special. The "sessionTable" configuration
      * property can be used to override the default session-table, 
      * which defaults to the template handler/filter prefix.
      */

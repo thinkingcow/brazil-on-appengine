@@ -31,7 +31,7 @@
  *
  * 1.10 08/06/20-08:27:08 (suhler)
  *   document
- *   body attribyte
+ *   body attribute
  *
  * 1.9 08/06/09-16:12:30 (suhler)
  *   add "method" and "body" options to allow arbitrary http methods, and associate message bodies
@@ -94,6 +94,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -125,6 +127,9 @@ import java.util.StringTokenizer;
  * in which case POST is the default.
  * <dt>body<dd>The message body, if any.  If a message body is supplied, then the content-type
  *   is set to "application/x-www-form-urlencoded" by default.
+ * <dt>type<dd>Override the default content type for data to be uploaded.  This is done before
+ * "addHeaders" is processed.
+ * <dt>encoding<dd>Set the character encoding for the content body (defaults to UTF-8).
  * <dt>alt<dd>Text to insert if URL can't be obtained.
  * <dt>name<dd>The name of the variable to put the result in.
  *   If this is specified, the content is not included in place.
@@ -169,6 +174,11 @@ import java.util.StringTokenizer;
  *   [Note, this mechanism for adding headers in different from that used
  *   by the IncludeTemplate(), which is unfortunate].
  *   do be added to the set of HTTP headers accompanying the request.  The
+ *   <dt>contenthandlers
+ *   <dd>A whitespace list of tokens representing classes that will handle particular content
+ *   types.  For each token the property "[token].class" is used to specify the class name.
+ *   Handlers are tried in order until one processes the content.  If no handler is specified,
+ *   The default handler, whose behavior is described here, is used.
  * </dl>
  * If the request fails, the "error" property will be set with a short message, 
  * prefixed with the template name.
@@ -176,22 +186,73 @@ import java.util.StringTokenizer;
  * Note: This used to be called the IncludeTemplate, but was
  * renamed to avoid confusion with the other IncludeTemplate.
  * This template will be deprecated when the IncludeTemplate completely
- * sub-sumes this functionality.
+ * subsumes this functionality.
  *
  * @author		Stephen Uhler
  * @version		@(#)FetchTemplate.java	1.11
  */
 
 public class FetchTemplate extends Template {
+  
+  // Keep a map of handlers per template configuration
+  private static HashMap<String,List<ContentHandler>> handlerMap = 
+      new HashMap<String, List<ContentHandler>>();
+  
+  /**
+   * One time initialization of content handlers
+   * XXX Handlers should be passed their names so they can find their properties.
+   */
+  @Override
+  public boolean init(RewriteContext hr) {
+    setup(hr);
+    return true;
+  }
+  
+  /**
+   * Install the content handlers.
+   * XXX This class was designed to fetch remote html content to incorporate into
+   *     an html page, but is being pushed to deal with non-html content as well.
+   *     This is a first-pass attempt to allow pluggable content handlers based on the
+   *     return content type.  It has many deficiencies.
+   * @param hr
+   */
+  
+  private synchronized void setup(RewriteContext hr) {
+    List<ContentHandler> handlers = handlerMap.get(hr.prefix);
+    if (handlers == null) {
+      handlers = new ArrayList<ContentHandler>();
+      StringTokenizer st = new StringTokenizer(hr.getProps("contenthandlers", ""));
+      while(st.hasMoreTokens()) {
+        String token = st.nextToken();
+        try {
+          String className = hr.request.getProps().getProperty(token + ".class");
+          Class<? extends ContentHandler> cls = Class
+              .forName(className)
+              .asSubclass(ContentHandler.class);
+          ContentHandler handler = cls.newInstance();
+          handlers.add(handler);
+          hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
+                  "Installing handler: " + token);
+        } catch (Exception e) {
+          hr.request.log(Server.LOG_WARNING, hr.prefix,
+                  "Can't install handler: " + token + " (" + e + ")");
+        }
+      }
+      handlers.add(new DefaultHandler());
+      handlerMap.put(hr.prefix, handlers);
+    }
+  }
 
-  public void
-  tag_include(RewriteContext hr) {
+  public void tag_include(RewriteContext hr) {
     String href = hr.get("href");	// the url to fetch
     String alt = hr.get("alt");	    // the result if fetch failed
     String name = hr.get("name");	// the variable to put the result in
     String post = hr.get("post");	// post data (if any) DEPRECATED - use body`
     String body = hr.get("body");	// post data (if any)
+    String type = hr.get("type", "application/x-www-form-urlencoded");
+    String encoding = hr.get("encoding", "UTF-8");
     String method = hr.get("method", "GET").toUpperCase();	// the method
+    boolean isDebug = hr.isTrue("debug");
     boolean follow = !hr.isTrue("nofollow");  // follow redirects
     boolean addClientHeaders = hr.isTrue("addclientheaders");
     String addHeaders = hr.get("addheaders"); // names of headers to add
@@ -211,14 +272,7 @@ public class FetchTemplate extends Template {
       // copy selected headers from client
 
       if (addClientHeaders) {
-        con.addRequestProperty("Via", "Brazil-Fetch/" + Server.getVersion());
-        MimeHeaders map = new MimeHeaders();
-        hr.request.getHeaders().copyTo(map);
-        removePointToPointHeaders(map, false); // Stolen from HttpRequest
-        map.remove("host");
-        for (int i = 0; i < map.size(); i++) {
-          con.addRequestProperty(map.getKey(i), map.get(i));
-        }
+        addClientHeaders(hr, con);
       } else {
         con.addRequestProperty("User-agent", "Brazil-Fetch/" + Server.getVersion());
       }
@@ -233,11 +287,15 @@ public class FetchTemplate extends Template {
           String value = hr.request.getProps().getProperty(token + ".value");
           if (key != null && value != null) {
             con.addRequestProperty(key, value);
+            hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
+                "Adding http header: " + key + ": " + value);
           }
         }
       }
-      hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix,
-              "Sending http headers: " + con.getRequestProperties());
+      
+      if (isDebug) {
+        debug(hr, href + " Sending: " + con.getRequestProperties());
+      }
 
       if (post != null && body == null) { // for backward compatibility
         body = post;
@@ -252,15 +310,20 @@ public class FetchTemplate extends Template {
         con.setReadTimeout(timeoutSec * mult);
       }
       con.setRequestMethod(method);
-      if (body != null) {
+      if (body != null && body.length() > 0) {
         if (con.getRequestProperty("content-type") == null) {
-          con.setRequestProperty("content-type", "application/x-www-form-urlencoded");
+          con.setRequestProperty("content-type", type + ";  charset=" + encoding);
         }
         con.setDoOutput(true);
         OutputStream out = con.getOutputStream();
-        out.write(body.getBytes());
-        System.err.println("Sending postdata: (" + body + ")");
+        // XXX should probably deal with an UnsupportedEncoding exception here
+        byte[] bodyBytes = body.getBytes(encoding);
+        out.write(bodyBytes);
         out.close();
+        System.err.println("Sending postdata: " + bodyBytes.length + " (" + body + ")");
+        if (isDebug) {
+          debug(hr, href + " body: " + body);
+        }
       }
      
       long startTime = System.currentTimeMillis();
@@ -304,12 +367,15 @@ public class FetchTemplate extends Template {
         hr.request.getProps().put(getHeaders + ".timeMillis",
                 "" + (System.currentTimeMillis() - startTime));
       }
-      String data = bo.toString();
-
-      if (name != null) {
-        hr.request.getProps().put(name, data);
-      } else {
-        hr.append(data);
+      
+      //  Find a handler to process the content
+      
+      byte[] data = bo.toByteArray();
+      for (ContentHandler handler : handlerMap.get(hr.prefix)) {
+        hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix, "processing: " + handler);
+        if (handler.processContent(hr, con.getContentType(), data)) {
+          break;
+        }
       }
     } catch (IOException e) {
       System.err.println("Oops: " + e);
@@ -330,6 +396,21 @@ public class FetchTemplate extends Template {
       }
     }
     hr.killToken();
+  }
+
+  /**
+   * @param hr
+   * @param con
+   */
+  private void addClientHeaders(RewriteContext hr, HttpURLConnection con) {
+    con.addRequestProperty("Via", "Brazil-Fetch/" + Server.getVersion());
+    MimeHeaders map = new MimeHeaders();
+    hr.request.getHeaders().copyTo(map);
+    removePointToPointHeaders(map, false); // Stolen from HttpRequest
+    map.remove("host");
+    for (int i = 0; i < map.size(); i++) {
+      con.addRequestProperty(map.getKey(i), map.get(i));
+    }
   }
 
   /**
@@ -355,6 +436,39 @@ public class FetchTemplate extends Template {
       headers.remove("Proxy-Authenticate");
       headers.remove("Public");
       headers.remove("Transfer-Encoding");
+    }
+  }
+  
+  /**
+   * A content handler for processing HTTP results.  The handler should transform the results into
+   * one or more properties, then return "true".  Returning false causes another handler to get a
+   * crack at it.
+   * @author suhler@google.com (Stephen Uhler)
+   *
+   */
+  
+  public interface ContentHandler {
+    public boolean processContent(RewriteContext hr, String type, byte[] results)
+        throws IOException;
+  }
+  
+  /**
+   * The default Content handler - the original behavior
+   * @author suhler@google.com (Stephen Uhler)
+   *
+   */
+  static class DefaultHandler implements ContentHandler {
+    @Override
+    @SuppressWarnings("unused")
+    public boolean processContent(RewriteContext hr, String type, byte[] data) {
+      String name = hr.get("name");
+      String  results = new String(data);
+      if (name != null) {
+        hr.request.getProps().put(name, results);
+      } else {
+        hr.append(results);
+      }
+      return true;
     }
   }
 }

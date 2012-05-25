@@ -184,6 +184,8 @@ import sunlabs.brazil.util.LexHTML;
 import sunlabs.brazil.util.regexp.Regexp;
 import sunlabs.brazil.util.regexp.Regsub;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Hashtable;
@@ -334,7 +336,7 @@ public class TemplateRunner
 		temPrefix = temName + ".";
 	    }
 
-	    Class temType = Class.forName(className.trim());
+	    Class<?> temType = Class.forName(className.trim());
 	    if (TemplateInterface.class.isAssignableFrom(temType) == false) {
 	      throw new ClassCastException(temType.getName());
 	    }
@@ -482,42 +484,52 @@ public class TemplateRunner
     public void
     process(RewriteContext hr)
     {
-	switch (hr.getType()) {
-	    case LexHTML.COMMENT:
-	    case LexHTML.STRING:
-	    case LexHTML.TAG: {
-		String tag;
-		if (hr.getType() == LexHTML.COMMENT) {
-		    tag = "comment";
-		    // System.out.println("(comment)");
-		} else if (hr.getType() == LexHTML.STRING) {
-		    tag = "string";
-		} else {
-		    tag = hr.getTag();
-		    tagsSeen++;
-		}
-		Dispatch d = (Dispatch) dispatch.get(tag);
-		if (hr.getType() == LexHTML.TAG && d == null) {
-		    d = (Dispatch) dispatch.get("defaultTag");
-		}
-		if (d != null) {
-		    Template obj = (Template) hr.templates.elementAt(d.index);
-		    // see discussion in RewriteContext regarding prefix
-		    hr.prefix = d.prefix;
-		    try {
-			d.method.invoke(obj, hr.args);
-			tagsProcessed++;
-		    } catch (InvocationTargetException e) {
-			hr.append("<!-- " + tag + ":  " +
-				e.getTargetException() + " -->");
-			e.getTargetException().printStackTrace();
-		    } catch (Exception e) {
-			hr.append("<!-- " + tag + ":  " + e + " -->");
-			e.printStackTrace();
-		    }
-		}
-	    }
-	}
+      switch (hr.getType()) {
+        case LexHTML.COMMENT:
+        case LexHTML.STRING:
+        case LexHTML.TAG: {
+          String tag;
+          if (hr.getType() == LexHTML.COMMENT) {
+            tag = "comment";
+            // System.out.println("(comment)");
+          } else if (hr.getType() == LexHTML.STRING) {
+            tag = "string";
+          } else {
+            tag = hr.getTag();
+            tagsSeen++;
+          }
+          Dispatch d = (Dispatch) dispatch.get(tag);
+          if (hr.getType() == LexHTML.TAG && d == null) {
+            d = (Dispatch) dispatch.get("defaultTag");
+          }
+          if (d != null) {
+            Template obj = (Template) hr.templates.elementAt(d.index);
+            // see discussion in RewriteContext regarding prefix
+            hr.prefix = d.prefix;
+            try {
+              d.method.invoke(obj, hr.args);
+              tagsProcessed++;
+            } catch (InvocationTargetException e) {
+              hr.append("<!-- " + tag + ":  " + e.getTargetException() + " -->");
+              hr.append("<!-- " +  stackTraceAsString(e).replace('-', '=') + " -->");
+              e.getTargetException().printStackTrace();
+            } catch (Exception e) {
+              hr.append("<!-- " + tag + ":  " + e + " -->");
+              hr.append("<!-- " +  stackTraceAsString(e).replace('-', '=') + " -->");
+            }
+          }
+        }
+      }
+    }
+    
+    /**
+     * Return a Stacktrace as a string.
+     */
+
+    private String stackTraceAsString(Exception e) {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      e.printStackTrace(new PrintStream(baos));
+      return baos.toString();
     }
 
     /**

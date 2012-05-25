@@ -521,4 +521,19 @@ public class SubstPropsHandler implements Handler {
        return value.replaceAll("'", "\\\\'");
     }
   }
+  
+  /**
+   * Escape quote characters (for use in Macros).
+   * Turns all (") into "\q", (<) into (\l) and (>) into (\g),
+   * making a String suitable for use as a template attribute value.
+   */
+  public static class DeQuote extends NullConverter {
+    @Override
+    public String map(String value) {
+       return value
+           .replaceAll("\"", "\\\\q")
+           .replaceAll("<", "\\\\l")
+           .replaceAll(">", "\\\\g");
+    }
+  }
 }

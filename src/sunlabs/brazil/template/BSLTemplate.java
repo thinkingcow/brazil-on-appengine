@@ -1260,8 +1260,15 @@ public class BSLTemplate extends Template implements Serializable {
 	    }
 	}
 	if (match && setProps) {
+	    //System.err.println("push: " + bag.nameProp + "=" + name);
 	    bag.local.push(bag.nameProp, name);
-	    bag.local.push(bag.valueProp, bag.local.getUncovered(name));
+	    //System.err.println("push: " + bag.valueProp + "=" + bag.local.getUncovered(name));
+	    String uncovered = bag.local.getUncovered(name);
+	    // XXX could have been removed ??
+	    if (uncovered != null) {
+	      bag.local.push(bag.valueProp, bag.local.getUncovered(name));
+	    }
+	      
 	}
 	return match;
     }
@@ -1630,54 +1637,54 @@ public class BSLTemplate extends Template implements Serializable {
      */
 
     static class BSLProps extends PropertiesList {
-	Request r;
-	PropertiesList defaults;
+      Request r;
+      PropertiesList defaults;
 
-	public
-	BSLProps(Request r) {
-	    this.r = r;
-	    defaults = r.getProps();
-	    addBefore(defaults);
-	    r.setProps(this);
-	}
+      public
+      BSLProps(Request r) {
+        this.r = r;
+        defaults = r.getProps();
+        addBefore(defaults);
+        r.setProps(this);
+      }
 
-	@Override
-  public Object
-	put(Object key, Object value) {
-	    return defaults.put(key, value);
-	}
+      @Override
+      public Object
+      put(Object key, Object value) {
+        return defaults.put(key, value);
+      }
 
-	@Override
-  public Object
-	remove(Object key) {
-	    return defaults.remove(key);
-	}
+      @Override
+      public Object
+      remove(Object key) {
+        return defaults.remove(key);
+      }
 
-	/**
-	 * Mark this properties as transient, 'cause it will be
-	 * removed after the foreach ends.
-	 */
+      /**
+       * Mark this properties as transient, 'cause it will be
+       * removed after the foreach ends.
+       */
 
-	@Override
-  public boolean isTransient() {
-	    return true;
-	}
+      @Override
+      public boolean isTransient() {
+        return true;
+      }
 
-	public void
-	push(Object key, Object value) {
-	    super.put(key, value);
-	}
+      public void
+      push(Object key, Object value) {
+        super.put(key, value);
+      }
 
-	public String
-	getUncovered(String key) {
-	    return defaults.getProperty(key);
-	}
+      public String
+      getUncovered(String key) {
+        return defaults.getProperty(key);
+      }
 
-	public void
-	restore() {
-	    remove();
-	    r.setProps(defaults);
-	}
+      public void
+      restore() {
+        remove();
+        r.setProps(defaults);
+      }
     }
 
     /**

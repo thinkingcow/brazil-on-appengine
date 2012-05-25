@@ -108,43 +108,71 @@ public class ResourceTemplate extends Template {
   
   /**
    * Download a resource into a property.  This only works for file whose mime types are text/...
+   * This also subsumes the SourceTemplate functionallity
    * - namespace        which namespace to use
    * - name             the name of the resource
-   * - property         Where to put the contents (defaults to "download")
-   * - max              The max size to accept (defaults to 10000? (not implemented)
+   * - property         Where to put the contents (if not specified, output is inline)
+   * - eval=true|false  Do ${processing}, including all attributes in the tag
+   * - reprocess=true|false 
+   *                    Reprocess this text as a template (this is not very efficient).
+   *                    This only makes sense if "property" is not specified.
+   * - max              The max size to accept (defaults to 10000? [not implemented])
    */
   
   public void tag_download(RewriteContext hr) {
     String root = hr.get("namespace","brazil");
     String name= hr.get("name");
-    String property = hr.get("property", "download");
-    
+    String property = hr.get("property");
+
     debug(hr);
     hr.killToken();
-    
+
     if (name == null) {
       debug(hr, "Missing name");
       return;
     }
-    
+
     String type = FileHandler.getMimeType(name, hr.request.getProps(), hr.prefix);
     if (type == null || !type.toLowerCase().startsWith("text")) {
-      hr.request.getProps().put(hr.prefix + "error", "Invalid file type: " + type);
+      hr.request.getProps().put(hr.prefix + "error", "Invalid resource type: " + type);
       debug(hr, "Invalid file type");
       return;
     }
-    
+
     Resource resource = Resource.load(root + name);
     if (resource == null) {
-      hr.request.getProps().put(hr.prefix + "error", "No such file");
+      hr.request.getProps().put(hr.prefix + "error", "No such resource");
       debug(hr, "No resource: (" + root + name + ")");
       return;
     }
     byte[] data = resource.getData();
-    debug(hr, "setting " + property + " to " + data.length + "bytes");
-    hr.request.getProps().put(property, new String(data));
+    String result = new String(data);
+    if (hr.isTrue("eval")) {
+      result = Format.subst(new RewriteContext.AttributeProps(hr), result);
+    }
+    if (property != null) {
+      hr.request.getProps().put(property, result);
+    } else if (hr.isTrue("reprocess")) {
+      String rest = hr.lex.rest();
+      if (rest != null) {
+        hr.lex.replace(result + rest);
+      } else {
+        hr.lex.replace(result);
+      }
+    } else {
+      hr.append(result);
+    }
   }
   
+  /**
+   * For compatibility with the SourceTemplate
+   * @param hr
+   */
+  
+  public void tag_source(RewriteContext hr) {
+    tag_download(hr);
+  }
+
   /**
    * Delete a resource.
    * @param hr
@@ -328,6 +356,37 @@ public class ResourceTemplate extends Template {
      debug(hr, "loaded " + key);
     } else {
       debug(hr, "Invalid command");
+    }
+  }
+  
+  /**
+   * Template to manage persistent store.
+   * <li>&lt;resource command="flush" &gt;<br>
+   * Clear the local cache.
+   * <li>&lt;resource command="clear" name="/xxx" &gt;<br>
+   * Clear the cache for resource "/xxx"
+   * (not used?)
+   */
+
+  public void tag_resource(RewriteContext hr) {
+    String root = hr.get("namespace", "brazil");
+    String command = hr.get("command");
+    debug(hr);
+    hr.killToken();
+    if (command==null) {
+      debug(hr, "Missing command");
+      return;
+    }
+     
+    // flush the cache
+    if (command.equals("flush")) {
+      int count = Resource.clearCache();
+      debug(hr, "cleared in-memory cache:" + count);
+      return;
+    }
+    String name=null;
+    if (command.equals("clear") && (name=hr.get("name"))!= null) {
+      Resource.clear(root + name);
     }
   }
 }

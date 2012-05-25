@@ -207,11 +207,11 @@ public class MultipartUploadResourceHandler implements Handler {
      */
 
     public Split(byte[] bytes) {
-      partEnd = 0;
+      partEnd = - 2;
       this.bytes = bytes;
       bndryEnd = indexOf(bytes, 0, bytes.length, "\r\n");
-      partStart=0;
-      contentStart=0;
+      partStart = 0;
+      contentStart = 0;
     }
 
     /**
@@ -220,7 +220,7 @@ public class MultipartUploadResourceHandler implements Handler {
 
     public boolean
     nextPart() {
-      partStart = partEnd + bndryEnd+2;
+      partStart = partEnd + bndryEnd + 4;
       if (partStart >= bytes.length) {
         return false;
       }
@@ -228,7 +228,7 @@ public class MultipartUploadResourceHandler implements Handler {
       if (partEnd < 0) {
         return false;
       }
-      partEnd -=2; // back over \r\n
+      partEnd -= 2; // back over \r\n
       contentStart = indexOf(bytes, partStart, bytes.length, "\r\n\r\n") + 4;
       return true;
     }
@@ -271,7 +271,17 @@ public class MultipartUploadResourceHandler implements Handler {
      */
 
     public String header() {
-      return (new String(bytes, partStart, contentStart-partStart));
+      return (new String(bytes, partStart, contentStart - partStart));
+    }
+    
+    /**
+     * Return the header as a byte array
+     */
+    public byte[] headerBytes() {
+      int length = contentStart - partStart;
+      byte[] result = new byte[length];
+      System.arraycopy(bytes, partStart, result, 0, length);
+      return result;
     }
 
     /**

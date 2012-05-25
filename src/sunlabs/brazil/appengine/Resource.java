@@ -291,10 +291,10 @@ public class Resource {
       String search = "path.startsWith(\"" + prefix + "\")";
       Query query = pm.newQuery(Resource.class, search);
       // query.setKeysOnly(); - needs to be com.google.appengine.api.datastore.Query
-      Collection col = (Collection) query.execute();
+      Collection<Resource> col = (Collection<Resource>) query.execute();
       if (col != null) {
-        for (Iterator i = col.iterator(); i.hasNext ();) {
-          results.add(new ResourceInfo((Resource) i.next ()));
+        for (Iterator<Resource> i = col.iterator(); i.hasNext ();) {
+          results.add(new ResourceInfo(i.next ()));
         }
       }
       query.closeAll();

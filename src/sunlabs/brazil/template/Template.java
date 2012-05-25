@@ -133,11 +133,6 @@ import sunlabs.brazil.util.regexp.Regexp;
 public class Template implements TemplateInterface {
     private static final String DEBUG = "debug";
     public transient boolean debug = false;
-    static Regexp re;
-
-    static {
-       re = new Regexp("--");
-    }
 
     /**
      * Called before this template processes any tags.
@@ -170,12 +165,21 @@ public class Template implements TemplateInterface {
 
     protected void
     debug(RewriteContext hr, String msg) {
-	if (debug && msg != null) {
-	    // System.out.println("Debugging (" + msg + ")");
-	    hr.append("<!-- " + re.subAll(msg, "==") + " -->");
-	    hr.request.log(Server.LOG_DIAGNOSTIC+1, hr.prefix,
-		"<" + msg + ">");
-	}
+      if (debug && msg != null) {
+        // System.out.println("Debugging (" + msg + ")");
+        hr.append(makeHtmlComment(msg));
+        hr.request.log(Server.LOG_DIAGNOSTIC+1, hr.prefix,
+            "<" + msg + ">");
+      }
+    }
+    
+    private static Regexp fixCommentRe = new Regexp("--");
+    /**
+     * Turn an arbitrary string into an Html comment by changing
+     * all "--" sequences to "==" and surrounding it with <!-- ... -->.
+     */
+    public static String makeHtmlComment(String s) {
+      return "<!-- " + fixCommentRe.subAll(s, "==") + " -->";
     }
 
     /**
