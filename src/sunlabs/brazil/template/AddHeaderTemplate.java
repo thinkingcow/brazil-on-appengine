@@ -110,7 +110,6 @@
 
 package sunlabs.brazil.template;
 
-import sunlabs.brazil.server.FileHandler;
 import sunlabs.brazil.server.Server;
 import sunlabs.brazil.util.Format;
 import sunlabs.brazil.util.http.HttpUtil;
@@ -152,55 +151,54 @@ import java.util.Enumeration;
  * @version		@(#) AddHeaderTemplate.java 2.9@(#)
  */
 
+/* MODIFICATIONS
+ * 
+ * Modifications to this file are derived, directly or indirectly, from Original Code provided by
+ * the Initial Developer and are Copyright 2012 Google Inc.
+ * See Changes.txt for a complete list of changes from the original source code.
+ */
+
 public class AddHeaderTemplate extends Template {
 
-    /**
-     * Process the special <code>addheader</code> tag.
-     */
-    public void
-    tag_addheader(RewriteContext hr) {
-	Enumeration e = hr.keys();
-	while (e.hasMoreElements()) {
-	    String key = (String) e.nextElement();
-	    String value = hr.get(key);
-	    hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix +
-	    	"addheader: " + key + ": " + value);
-	    if (key.equals("nocontent")) {
-		hr.request.setStatus(204);
-	    } else if (key.equals("last-modified")) {
-		try {
-		    int tm = Integer.decode(value).intValue();
-		    value = HttpUtil.formatTime(tm);
-		} catch (Exception ex) {}
-		hr.request.addHeader(key,value);
-	    } else if (key.equals("status")) {
-		try {
-		    hr.request.setStatus(Integer.decode(value).intValue());
-		} catch (Exception ex) {
-		   debug(hr,"Invalid status code" + ex.getMessage()); 
-		}
-	    } else if (value.equals("")) {
-	        hr.request.getResponseHeaders().remove(key);
-	    } else {
-	      if (key.equals("location")) {
-	        hr.request.setStatus(302);
-	        if (!(value.startsWith("http://") ||
-	            value.startsWith("https://"))) {
-	          if (!value.startsWith("/")) {
-	            // relative to currentl url
-	            value = hr.request.getUrl().substring(0,
-	                hr.request.getUrl().lastIndexOf("/")) + value;
-	          } else {
-	            value = hr.request.serverUrl() + FileHandler.urlToPath(
-	              value);
-	          }
-	        }
-	        hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix +
-	            "redirecting to: " + value);
-	      }
-	      hr.request.addHeader(Format.subst(hr.request.getProps(),key),value);
-	    }
-	}
-	hr.killToken();
+  /**
+   * Process the special <code>addheader</code> tag.
+   */
+  public void
+  tag_addheader(RewriteContext hr) {
+    Enumeration<String> e = hr.keys();
+    while (e.hasMoreElements()) {
+      String key = e.nextElement();
+      String value = hr.get(key);
+      hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix + "addheader: " + key + ": " + value);
+      if (key.equals("nocontent")) {
+        hr.request.setStatus(204);
+      } else if (key.equals("last-modified")) {
+        try {
+          int tm = Integer.decode(value).intValue();
+          value = HttpUtil.formatTime(tm);
+        } catch (Exception ex) {}
+        hr.request.addHeader(key,value);
+      } else if (key.equals("status")) {
+        try {
+          hr.request.setStatus(Integer.decode(value).intValue());
+        } catch (Exception ex) {
+          debug(hr,"Invalid status code" + ex.getMessage()); 
+        }
+      } else if (value.equals("")) {
+        hr.request.getResponseHeaders().remove(key);
+      } else if (key.equals("location")) {
+        hr.request.setStatus(302);
+        if (!value.startsWith("http://") && !value.startsWith("https://")) {
+          if (!value.startsWith("/")) {
+            String url = hr.request.getUrl();
+            value = url.substring(0, url.lastIndexOf("/")) + "/" + value;
+          }
+          value = hr.request.serverUrl() + value;
+        }
+        hr.request.log(Server.LOG_DIAGNOSTIC, hr.prefix + "redirecting to: " + value);
+      }
+      hr.request.addHeader(Format.subst(hr.request.getProps(),key),value);
     }
+    hr.killToken();
+  }
 }
